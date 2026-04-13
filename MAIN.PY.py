@@ -1,1 +1,2 @@
 print('kys')
+print('kys')
