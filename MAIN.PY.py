@@ -1,1 +1,4 @@
-print("Kys")
+a=10
+print(a)
+
+
