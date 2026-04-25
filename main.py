@@ -1,42 +1,108 @@
 import customtkinter as ctk
+from PIL import Image
+
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
-root=ctk.CTk()
-root.geometry("600x500")
+
+root = ctk.CTk()
+root.geometry("900x500")
 root.title("Expense Tracker")
-login_frame=ctk.CTkFrame(root)
-login_frame.pack(fill="both", expand=True)
-container = ctk.CTkFrame(login_frame, width=350, height=350)
-container.place(relx=0.5, rely=0.5, anchor="center")
-ctk.CTkLabel(container, text="Login", font=("Arial", 26)).pack(pady=20)
-login_user=ctk.CTkEntry(container, placeholder_text="Username", width=250)
-login_user.pack(pady=10)
-login_pass=ctk.CTkEntry(container, placeholder_text="Password", width=250, show="*")
-login_pass.pack(pady=10)
-login_btn=ctk.CTkButton(container, text="Login", width=100)
-login_btn.pack(pady=20)
-create_btn=ctk.CTkButton(container, text="Create Account", width=150)
-create_btn.pack()
-signup_frame=ctk.CTkFrame(root)
-signup_container=ctk.CTkFrame(signup_frame, width=350, height=350)
-signup_container.place(relx=0.5, rely=0.5, anchor="center")
-def show_signup():
-     login_frame.pack_forget()
-     signup_frame.pack(fill="both", expand=True)
+
+left_frame = ctk.CTkFrame(root, corner_radius=0)
+left_frame.pack(side="left", fill="both", expand=True)
+
+original_img = Image.open("bg.jpg")
+
+img_label = ctk.CTkLabel(left_frame, text="")
+img_label.place(x=0, y=0, relwidth=1, relheight=1)
+
+def resize_image(event):
+    new_width = event.width
+    new_height = event.height
+
+    resized = original_img.resize((new_width, new_height), Image.LANCZOS)
+    new_img = ctk.CTkImage(resized, size=(new_width, new_height))
+
+    img_label.configure(image=new_img)
+    img_label.image = new_img
+
+left_frame.bind("<Configure>", resize_image)
+
+right_frame = ctk.CTkFrame(root, fg_color="#0d0d0d")
+right_frame.pack(side="right", fill="both", expand=True)
+
 def show_login():
     signup_frame.pack_forget()
     login_frame.pack(fill="both", expand=True)
-create_btn.configure(command=show_signup)
-ctk.CTkLabel(signup_container, text="Create Account", font=("Arial", 26)).pack(pady=30)
-signup_user=ctk.CTkEntry(signup_container, placeholder_text="Username", width=250)
-signup_user.pack(pady=10)
-signup_pass=ctk.CTkEntry(signup_container, placeholder_text="Password", width=250, show="*")
-signup_pass.pack(pady=10)
-signup_confirm=ctk.CTkEntry(signup_container, placeholder_text="Confirm Password", width=250, show="*")
-signup_confirm.pack(pady=10)
-create_btn=ctk.CTkButton(signup_container, text="Create Account", width=150)
-create_btn.pack(pady=20)
-back_btn=ctk.CTkButton(signup_container, text="Back to Login", width=150, command=show_login)
-back_btn.pack()
-root.mainloop()
 
+def show_signup():
+    login_frame.pack_forget()
+    signup_frame.pack(fill="both", expand=True)
+
+login_frame = ctk.CTkFrame(right_frame, fg_color="transparent")
+
+login_container = ctk.CTkFrame(login_frame, fg_color="transparent")
+login_container.place(relx=0.5, rely=0.5, anchor="center")
+
+ctk.CTkLabel(login_container, text="Sign in", font=("Arial", 28)).pack(pady=20)
+
+username = ctk.CTkEntry(login_container, width=300, height=40, placeholder_text="Username")
+username.pack(pady=10)
+
+password = ctk.CTkEntry(login_container, width=300, height=40, show="*", placeholder_text="Password")
+password.pack(pady=10)
+
+login_btn = ctk.CTkButton(login_container, text="Login", width=300, height=45, corner_radius=25)
+login_btn.pack(pady=15)
+
+create_btn = ctk.CTkButton(
+    login_container,
+    text="Create Account",
+    width=300,
+    height=45,
+    fg_color="transparent",
+    border_width=1,
+    corner_radius=25,
+    command=show_signup
+)
+create_btn.pack(pady=10)
+
+signup_frame = ctk.CTkFrame(right_frame, fg_color="transparent")
+
+signup_container = ctk.CTkFrame(signup_frame, fg_color="transparent")
+signup_container.place(relx=0.5, rely=0.5, anchor="center")
+
+ctk.CTkLabel(signup_container, text="Create Account", font=("Arial", 28)).pack(pady=20)
+
+new_user = ctk.CTkEntry(signup_container, width=300, height=40, placeholder_text="Username")
+new_user.pack(pady=10)
+
+new_pass = ctk.CTkEntry(signup_container, width=300, height=40, show="*", placeholder_text="Password")
+new_pass.pack(pady=10)
+
+confirm_pass = ctk.CTkEntry(signup_container, width=300, height=40, show="*", placeholder_text="Confirm Password")
+confirm_pass.pack(pady=10)
+
+create_account_btn = ctk.CTkButton(
+    signup_container,
+    text="Create Account",
+    width=300,
+    height=45,
+    corner_radius=25
+)
+create_account_btn.pack(pady=15)
+
+back_btn = ctk.CTkButton(
+    signup_container,
+    text="Back to Login",
+    width=300,
+    height=45,
+    fg_color="transparent",
+    border_width=1,
+    corner_radius=25,
+    command=show_login
+)
+back_btn.pack(pady=10)
+login_frame.pack(fill="both", expand=True)
+
+root.mainloop()
