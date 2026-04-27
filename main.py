@@ -20,7 +20,7 @@ def resize_image(event):
     new_width = event.width
     new_height = event.height
 
-    resized = original_img.resize((new_width, new_height), Image.LANCZOS)
+    resized = original_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
     new_img = ctk.CTkImage(resized, size=(new_width, new_height))
 
     img_label.configure(image=new_img)
