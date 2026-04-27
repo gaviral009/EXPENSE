@@ -15,30 +15,34 @@ fra.grid_columnconfigure(0,weight=0)
 fra.grid_columnconfigure(1,weight=1)
 fra.grid_rowconfigure(0,weight=1)
 
-#getting the bg image
-img = ctk.CTkImage(light_image=Image.open("dashbag.png"),size=(1524,784))
-label = ctk.CTkLabel(fra, image=img,text='')
-label.grid(row=0,column=0,columnspan=2,sticky='nsew')
-icon1=ctk.CTkImage(dark_image=Image.open("icon1.png"))
-icon2=ctk.CTkImage(dark_image=Image.open("icon2.png"))
-icon3=ctk.CTkImage(dark_image=Image.open("icon3.png"))
-icon4=ctk.CTkImage(dark_image=Image.open("icon4.png"))
-icon5=ctk.CTkImage(dark_image=Image.open("icon5.png"))
+#getting all the images here
+trykare=ctk.CTkImage(dark_image=Image.open("wave.jpeg"),size=(1524,784)) #bg
+#img = ctk.CTkImage(light_image=Image.open("dashbag.png"),size=(1524,784))
+icon1=ctk.CTkImage(dark_image=Image.open("icon1.png"))#bt
+icon2=ctk.CTkImage(dark_image=Image.open("icon2.png"))#bt
+icon3=ctk.CTkImage(dark_image=Image.open("icon3.png"))#bt
+icon4=ctk.CTkImage(dark_image=Image.open("icon4.png"))#bt
+icon5=ctk.CTkImage(dark_image=Image.open("icon5.png"))#bt
+logo=ctk.CTkImage(dark_image=Image.open("final logo.png"),size=(222,87))#logo
 
-#dashboard heading
-dash=ctk.CTkLabel(fra,text='Dashboard',font=('Calibri',75,'bold'),fg_color='transparent',bg_color='transparent',text_color='#00ABFF')
-dash.grid(row=0,column=1,sticky='n',pady=10)
+label = ctk.CTkLabel(fra, image=trykare,text='')
+label.grid(row=0,column=0,columnspan=2,sticky='nsew')
+
+#####have to use def function and connect to login ka page
+nam1='Pratik'
+nam='Hi '+nam1+'!'
+hi=ctk.CTkLabel(label,text=nam,text_color='white',font=('Arial',50),fg_color='transparent',bg_color='transparent')
+hi.grid(row=0,column=0,sticky='nw',padx=350,pady=70)
+
+wlc=ctk.CTkLabel(fra,text='Welcome to',text_color='white',font=('Arial',70))
 
 #another frame inside fra for the buttons on left
 sidebar=ctk.CTkFrame(fra,width=250, fg_color='#202020')
 sidebar.grid(row=0, column=0, sticky='nsw')
 sidebar.grid_propagate(False)
-'''
-def showextra():
-    bt4_1.grid(row=4,column=1,sticky='w',padx=250)
-    bt4_2.grid(row=5,column=1,sticky='w',padx=250)
-'''
 
+
+#monthly n long term budget
 visible=False
 def showextra():
     global visible
@@ -53,6 +57,10 @@ def showextra():
         bt4.configure(text='Budget                        ▶')
         visible=False
 
+#logo
+c=ctk.CTkLabel(sidebar,fg_color='#202020',width=250,height=200,text='',image=logo)
+c.grid(row=0,column=0)
+#all buttons
 bt1=ctk.CTkButton(sidebar,width=250,height=50,fg_color='#202020',hover_color='#FF8000',text='Income/Expense',text_color='white',font=('Calibri',20),anchor='w',image=icon1)
 bt2=ctk.CTkButton(sidebar,width=250,height=50,fg_color='#202020',hover_color='#FF8000',text='Investments',text_color='white',font=('Calibri',20),anchor='w',image=icon4)
 bt3=ctk.CTkButton(sidebar,width=250,height=50,fg_color='#202020',hover_color='#FF8000',text='Balance Management',text_color='white',font=('Calibri',20),anchor='w',image=icon3)
@@ -61,13 +69,11 @@ bt5=ctk.CTkButton(sidebar,width=250,height=50,fg_color='#202020',hover_color='#F
 bt4_1=ctk.CTkButton(sidebar,width=250,height=50,fg_color='#444444',hover_color='#FF8000',text='Monthly',text_color='white',anchor='w')
 bt4_2=ctk.CTkButton(sidebar,width=250,height=50,fg_color='#444444',hover_color='#FF8000',text='Long Term',text_color='white',anchor='w')
 
-bt1.grid(row=1,column=0,pady=(150,0))
+bt1.grid(row=1,column=0)
 bt2.grid(row=2,column=0)
 bt3.grid(row=3,column=0)
 bt4.grid(row=4,column=0)
 bt5.grid(row=5,column=0)
-
-
 
 #for it to change colour when hovered
 def onclick(event):
@@ -78,4 +84,7 @@ buttons=[bt1,bt2,bt3,bt4,bt5]
 for i in buttons:
     i.bind('<Enter>',onclick)
     i.bind('<Leave>',onleave)
+
+
+
 win.mainloop()
