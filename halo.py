@@ -473,4 +473,4 @@ def build_dashboard(username_value):
 
 
 build_auth_screen()
-root.mainloop()
+root.mainloop() 
