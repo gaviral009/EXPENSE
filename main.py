@@ -1,3 +1,5 @@
+import sys
+print(sys.executable)
 import customtkinter as ctk
 from PIL import Image
 ctk.set_appearance_mode("dark")
@@ -20,7 +22,7 @@ def resize_image(event):
 left_frame.bind("<Configure>", resize_image)
 right_frame = ctk.CTkFrame(root, fg_color="#0d0d0d")
 right_frame.pack(side="right", fill="both", expand=True)
-logo_img = ctk.CTkImage(Image.open("final logo.png"), size=(120, 120))
+logo_img = ctk.CTkImage(Image.open("final logo.png"), size=(222,87))
 def show_login():
     signup_frame.pack_forget()
     login_frame.pack(fill="both", expand=True)
