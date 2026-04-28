@@ -5,7 +5,7 @@ from PIL import Image
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 root = ctk.CTk()
-root.geometry("900x500")
+root.geometry("1524x784")
 root.title("Expense Tracker")
 left_frame = ctk.CTkFrame(root, corner_radius=0)
 left_frame.pack(side="left", fill="both", expand=True)
