@@ -16,7 +16,7 @@ fra.grid_columnconfigure(1,weight=1)
 fra.grid_rowconfigure(0,weight=1)
 
 #getting all the images here
-trykare=ctk.CTkImage(dark_image=Image.open("wave.jpeg"),size=(1524,784)) #bg
+trykare=ctk.CTkImage(dark_image=Image.open("wave.jpeg"),size=(1274,784)) #bg
 #img = ctk.CTkImage(light_image=Image.open("dashbag.png"),size=(1524,784))
 icon1=ctk.CTkImage(dark_image=Image.open("icon1.png"))#bt
 icon2=ctk.CTkImage(dark_image=Image.open("icon2.png"))#bt
@@ -24,17 +24,23 @@ icon3=ctk.CTkImage(dark_image=Image.open("icon3.png"))#bt
 icon4=ctk.CTkImage(dark_image=Image.open("icon4.png"))#bt
 icon5=ctk.CTkImage(dark_image=Image.open("icon5.png"))#bt
 logo=ctk.CTkImage(dark_image=Image.open("final logo.png"),size=(222,87))#logo
+wel=ctk.CTkImage(dark_image=Image.open("Welc.png"),size=(321,179))
 
-label = ctk.CTkLabel(fra, image=trykare,text='')
-label.grid(row=0,column=0,columnspan=2,sticky='nsew')
+
+intro=ctk.CTkFrame(fra,width=1274,height=784,fg_color='transparent',bg_color='transparent')
+intro.grid(row=0,column=1,sticky='nsew')
+
+label = ctk.CTkLabel(intro, image=trykare,text='')
+label.place(relx=0,rely=0,relheight=1,relwidth=1)
 
 #####have to use def function and connect to login ka page
 nam1='Pratik'
 nam='Hi '+nam1+'!'
-hi=ctk.CTkLabel(label,text=nam,text_color='white',font=('Arial',50),fg_color='transparent',bg_color='transparent')
-hi.grid(row=0,column=0,sticky='nw',padx=350,pady=70)
+hi=ctk.CTkLabel(intro,text=nam,text_color='white',font=('Arial',50),fg_color='transparent',bg_color='transparent')
+hi.place(relx=0.15,rely=0.08)
 
-wlc=ctk.CTkLabel(fra,text='Welcome to',text_color='white',font=('Arial',70))
+wlc=ctk.CTkLabel(intro,image=wel,text='',fg_color='transparent',bg_color='transparent')
+wlc.place(relx=0.5, rely=0.5)
 
 #another frame inside fra for the buttons on left
 sidebar=ctk.CTkFrame(fra,width=250, fg_color='#202020')
