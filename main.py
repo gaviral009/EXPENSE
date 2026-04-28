@@ -1,5 +1,3 @@
-import sys
-print(sys.executable)
 import customtkinter as ctk
 from PIL import Image
 ctk.set_appearance_mode("dark")
