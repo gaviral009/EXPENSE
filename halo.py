@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from PIL import Image
-import json
+import mysql.connector
+from mysql.connector import Error
 import os
 import re
 import hashlib
@@ -8,29 +9,87 @@ import secrets
 
 
 # ---------------------------------------------------------------------------
-# Paths / persistence helpers
+# Paths / database config
 # ---------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-USERS_FILE = os.path.join(BASE_DIR, "users.json")
+
+DB_CONFIG = {
+    "host": "localhost",
+    "user": "root",
+    "password": "your_mysql_password",
+    "database": "expense_tracker",
+}
 
 
 def _asset_path(filename):
     return os.path.join(BASE_DIR, filename)
 
 
-def _load_users():
-    if not os.path.exists(USERS_FILE):
-        return {}
+def _get_connection(include_database=True):
+    config = DB_CONFIG.copy()
+    if not include_database:
+        config.pop("database", None)
+    return mysql.connector.connect(**config)
+
+
+def _init_database():
     try:
-        with open(USERS_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
-    except (json.JSONDecodeError, OSError):
-        return {}
+        connection = _get_connection(include_database=False)
+        cursor = connection.cursor()
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']}")
+        cursor.close()
+        connection.close()
+
+        connection = _get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(255) NOT NULL UNIQUE,
+                salt VARCHAR(64) NOT NULL,
+                password_hash VARCHAR(64) NOT NULL
+            )
+            """
+        )
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+    except Error:
+        return False
 
 
-def _save_users(users):
-    with open(USERS_FILE, "w", encoding="utf-8") as file:
-        json.dump(users, file, indent=2)
+def _get_user(username):
+    try:
+        connection = _get_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT username, salt, password_hash FROM users WHERE username = %s",
+            (username,),
+        )
+        user = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        return user
+    except Error:
+        return None
+
+
+def _create_user(username, salt, password_hash):
+    try:
+        connection = _get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            "INSERT INTO users (username, salt, password_hash) VALUES (%s, %s, %s)",
+            (username, salt, password_hash),
+        )
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+    except Error:
+        return False
 
 
 def _hash_password(password, salt=None):
@@ -78,7 +137,6 @@ def center(win, width, height):
 
 center(root, 1524, 784)
 
-# Shared logo image (used by login, signup and dashboard sidebar)
 logo_img = ctk.CTkImage(Image.open(_asset_path("final logo.png")), size=(222, 87))
 
 
@@ -146,13 +204,13 @@ def build_auth_screen():
     def attempt_login():
         user_value = username.get().strip()
         password_value = password.get()
+
         if not user_value or not password_value:
             login_status.configure(text="Please enter both username and password.", text_color="#ff6b6b")
             return
 
-        users = _load_users()
-        record = users.get(user_value)
-        if not record or not _verify_password(password_value, record["salt"], record["hash"]):
+        record = _get_user(user_value)
+        if not record or not _verify_password(password_value, record["salt"], record["password_hash"]):
             login_status.configure(text="Invalid username or password.", text_color="#ff6b6b")
             return
 
@@ -219,14 +277,15 @@ def build_auth_screen():
             signup_status.configure(text=err, text_color="#ff6b6b")
             return
 
-        users = _load_users()
-        if user_value in users:
+        if _get_user(user_value):
             signup_status.configure(text="Username already exists.", text_color="#ff6b6b")
             return
 
         salt, digest = _hash_password(password_value)
-        users[user_value] = {"salt": salt, "hash": digest}
-        _save_users(users)
+        if not _create_user(user_value, salt, digest):
+            signup_status.configure(text="Could not create account. Check MySQL connection.", text_color="#ff6b6b")
+            return
+
         signup_status.configure(text="Account created! Please sign in.", text_color="#4ade80")
         new_user.delete(0, "end")
         new_pass.delete(0, "end")
@@ -388,6 +447,46 @@ def build_dashboard(username_value):
 
     state = {"visible": False}
 
+    def showextra():
+        if not state["visible"]:
+            bt4_1.grid(row=5, column=0, sticky="w")
+            bt4_2.grid(row=6, column=0, sticky="w")
+            bt5.grid_configure(row=7)
+            bt4.configure(text="Budget                        ▼")
+            state["visible"] = True
+        else:
+            bt4_1.grid_forget()
+            bt4_2.grid_forget()
+            bt5.grid_configure(row=5)
+            bt4.configure(text="Budget                        ▶")
+            state["visible"] = False
+
+    bt4 = ctk.CTkButton(
+        sidebar,
+        width=250,
+        height=50,
+        fg_color="#202020",
+        hover_color="#00A998",
+        text="Budget                        ▶",
+        text_color="white",
+        font=("Calibri", 20),
+        anchor="w",
+        image=icon5,
+        command=showextra,
+    )
+    bt5 = ctk.CTkButton(
+        sidebar,
+        width=250,
+        height=50,
+        fg_color="#202020",
+        hover_color="#00A998",
+        text="Analytics",
+        text_color="white",
+        font=("Calibri", 20),
+        anchor="w",
+        image=icon2,
+    )
+
     bt4_1 = ctk.CTkButton(
         sidebar,
         width=250,
@@ -411,46 +510,6 @@ def build_dashboard(username_value):
         font=("Calibri", 16),
     )
 
-    def showextra():
-        if not state["visible"]:
-            bt4_1.grid(row=5, column=0, sticky="w")
-            bt4_2.grid(row=6, column=0, sticky="w")
-            bt5.grid_configure(row=7)
-            bt4.configure(text="Budget                        v")
-            state["visible"] = True
-        else:
-            bt4_1.grid_forget()
-            bt4_2.grid_forget()
-            bt5.grid_configure(row=5)
-            bt4.configure(text="Budget                        >")
-            state["visible"] = False
-
-    bt4 = ctk.CTkButton(
-        sidebar,
-        width=250,
-        height=50,
-        fg_color="#202020",
-        hover_color="#00A998",
-        text="Budget                        >",
-        text_color="white",
-        font=("Calibri", 20),
-        anchor="w",
-        image=icon5,
-        command=showextra,
-    )
-    bt5 = ctk.CTkButton(
-        sidebar,
-        width=250,
-        height=50,
-        fg_color="#202020",
-        hover_color="#00A998",
-        text="Analytics",
-        text_color="white",
-        font=("Calibri", 20),
-        anchor="w",
-        image=icon2,
-    )
-
     bt1.grid(row=1, column=0)
     bt2.grid(row=2, column=0)
     bt3.grid(row=3, column=0)
@@ -472,5 +531,8 @@ def build_dashboard(username_value):
         button.bind("<Leave>", on_leave)
 
 
+if not _init_database():
+    print("MySQL connection failed. Check DB_CONFIG and make sure MySQL is running.")
+
 build_auth_screen()
-root.mainloop() 
+root.mainloop()
