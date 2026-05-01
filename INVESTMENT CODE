@@ -223,3 +223,67 @@ def draw_mini_chart(tval, tinv):
         x2, y2 = coords[i + 1]
         chart_canvas.create_line(x1, y1, x2, y2, fill="#00d4aa", width=2, smooth=True)
         
+    cc= len(coords)
+    i = 0
+    for pt in coords:
+        cx = pt[0]
+        cy = pt[1]
+        if i==cc-1:
+            r = 5
+        else:
+            r = 3
+        chart_canvas.create_oval(cx - r, cy - r, cx + r, cy + r,fill="#00d4aa", outline="#161b22" )
+         i+=1
+            
+    i = 0
+    TC= len(timestamps)
+
+    for ts in timestamps:
+        cx = coords[i][0]
+        dl = ts.strftime("%d %b")
+        tl = ts.strftime("%H:%M")
+        lT = dl + "\n" + tl
+
+        if i == total_count - 1:
+            colour = "#00d4aa" 
+            weight = "bold"
+        else:
+            colour = "#6e7f8f"  
+            weight = "normal"
+
+        chart_canvas.create_text(cx, by + 5,  text=lT, fill=colour,font=("Segoe UI", 7, weight),anchor="n",justify="center")
+        i+=1
+
+
+def rebhogrid():
+
+    for widget in holdings_frame.winfo_children():
+        widget.destroy()
+
+    
+    if len(hoList) == 0:
+        el= ctk.CTkLabel( holdings_frame,text="No holdings yet  ·  click + New Investment",  font=("Segoe UI", 11), text_color="#6e7f8f")
+        el.grid(row=0, column=0, columnspan=3, pady=30)
+        return
+
+    
+    col = 0
+    row = 0
+
+    for h in hoList:
+        gl = h["value"] - h["invested"]
+         if h["invested"] > 0 :
+              pct = (gl / h["invested"] * 100)
+        else :
+            pct=0
+
+        card = ctk.CTkFrame( holdings_frame, fg_color="#161b22" ,corner_radius=12,border_width=1,border_color="#2a3441")
+        card.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+        card.columnconfigure(1, weight=1)   
+       
+        icon_frame = ctk.CTkFrame(card,fg_color=h["color"],   width=42, height=42,corner_radius=10)
+        icon_frame.grid(row=0, column=0, rowspan=2, padx=(12, 8), pady=12)
+        icon_frame.grid_propagate(False)
+
+        chart_canvas.create_line(x1, y1, x2, y2, fill="#00d4aa", width=2, smooth=True)
+        
