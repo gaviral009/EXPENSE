@@ -161,3 +161,16 @@ def draw_mini_chart(tval, tinv):
     for entry in portHis:
         t = entry[0]
         timestamps.append(t)
+    
+    mn  = min(yval)
+    mx  = max(yval)
+    if mx != mn :
+         rng = mx - mn
+    else :
+        rng=1
+    
+    mndis = mn * 0.9
+    mxdis = mx * 1.05
+    rngdis = mxdis - mndis
+
+    numop = len(yval)
