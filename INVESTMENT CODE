@@ -174,3 +174,52 @@ def draw_mini_chart(tval, tinv):
     rngdis = mxdis - mndis
 
     numop = len(yval)
+     numop = len(yval)
+    ng = 4
+    for i in range(ng+ 1):
+        gy= ptop + (ch / ng) * i
+        rv = mxdis - (rngdis/ ng) * i
+
+        chart_canvas.create_line(pleft, gry, w - pright, gy, fill="#1e2d3d", width=1)
+         if raw_val >= 100_000:
+             tI = ("₹" + str(int(rval // 1000)) + "k")
+        else :
+            tI=("₹" + str(int(raw_val)))
+        chart_canvas.create_text(pleft - 4, gy, text=tI, anchor="e", fill= "#6e7f8f", font=("Segoe UI", 8))
+
+   
+    coords = []
+    i=0
+    for  val in (yval):
+        x = pleft + (i / (numop - 1)) * cw
+        y = ptop  + ch - ((val - mndis) / rngdis) * ch
+        coords.append((x, y))
+        i+=1
+
+    
+    by = ptop + ch
+
+    fp = list(coords)
+    fp.append((coords[-1][0], by))
+    fp.append((coords[0][0],  by))
+    fl = []
+    for pt in fp:
+        fl.extend(pt)
+
+    chart_canvas.create_polygon(fl, fill="#004530", outline="")
+
+    nfs = 36
+    for i in range(nfs):
+        fr = i/ nfs
+        color = lerp_color("#005a3c",  "#161b22", fr)
+        sys= int(ptop + ch * fr)
+        sye= sys + max(1, int(ch /nfs))
+        chart_canvas.create_rectangle(coords[0][0], sys, coords[-1][0], sye,fill=color, outline="")
+
+    chart_canvas.create_polygon(fl, fill="#004530", outline="")
+
+    for i in range(len(coords) - 1):
+        x1, y1 = coords[i]
+        x2, y2 = coords[i + 1]
+        chart_canvas.create_line(x1, y1, x2, y2, fill="#00d4aa", width=2, smooth=True)
+        
