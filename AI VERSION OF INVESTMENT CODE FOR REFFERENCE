@@ -1,0 +1,906 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║              INVESTMENTS DASHBOARD  —  FULLY COMMENTED VERSION              ║
+# ║   Every line explained like you're 5 years old 🧒  + datetime on chart     ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+# ── IMPORTS ───────────────────────────────────────────────────────────────────
+# Think of imports like packing your school bag before leaving home.
+# You grab the tools (rulers, pencils, books) you'll need for the day.
+
+import customtkinter as ctk   # A fancy toolkit for drawing beautiful windows and buttons.
+                               # "ctk" is just a short nickname we give it so we don't
+                               # have to type "customtkinter" every single time.
+
+import tkinter as tk           # The older, more basic window toolkit that ctk is built on.
+                               # We need it for the Canvas widget (our drawing board for charts).
+
+from tkinter import messagebox # A small tool that pops up a little warning/info box on screen.
+                               # Like when your phone says "Are you sure you want to delete this?"
+
+from datetime import datetime  # NEW ✅  Lets us ask the computer "what time is it right now?"
+                               # We'll use this to put real dates/times on the chart.
+
+# ── GLOBAL APPEARANCE SETTINGS ───────────────────────────────────────────────
+# Before we build anything, we tell customtkinter what "skin" to wear.
+
+ctk.set_appearance_mode("dark")        # Use the dark theme — like switching your phone to night mode.
+ctk.set_default_color_theme("dark-blue")  # Default accent colours will lean blue/teal.
+
+# ── COLOUR PALETTE ────────────────────────────────────────────────────────────
+# These are like the crayons in our box.  We give each colour a name so we can
+# use the name instead of remembering the weird code like "#0d1117".
+# Hex codes (#rrggbb) mix red, green, blue light — just like mixing paint.
+
+BG      = "#0d1117"   # Background  — very dark navy, almost black.
+CARD    = "#161b22"   # Card panels — slightly lighter dark for raised surfaces.
+BORDER  = "#2a3441"   # Borders     — the thin lines around boxes.
+ACCENT  = "#00d4aa"   # Accent teal — the bright pop of colour (like a highlighter pen).
+TEXT    = "#e6edf3"   # Main text   — light grey, easy to read on dark backgrounds.
+MUTED   = "#6e7f8f"   # Muted text  — dimmer grey for less important labels.
+GREEN   = "#3fb950"   # Profit green — we see this when money goes UP.
+RED     = "#ff6b6b"   # Loss red     — we see this when money goes DOWN.
+INPUTBG = "#0d1117"   # Input field background — same as main BG so they blend in.
+
+# ── DATA STORAGE ──────────────────────────────────────────────────────────────
+# This is our "notebook" where we remember all the user's investments.
+# It starts empty (like a blank page) and grows as the user adds things.
+
+holdings_list = []       # A list of dictionaries. Each dict = one investment holding.
+
+portfolio_history = []   # A list of (datetime, total_value) tuples.
+                         # Every time the user adds a holding we snapshot the exact
+                         # date+time and the new portfolio total.
+                         # The chart ONLY plots these real points — zero fake history.
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HELPER FUNCTION 1 — format_inr
+#  Turns a plain number like 1234567 into the Indian number system: ₹12,34,567
+#  India groups digits as: ...XX,XX,XX,XXX  (last 3, then pairs from right)
+# ══════════════════════════════════════════════════════════════════════════════
+def format_inr(amount):
+    # Round to the nearest whole rupee and convert to int so we have no decimals.
+    amount = int(round(amount))
+
+    # We work with the absolute value (ignore minus sign for now) as a string.
+    s = str(abs(amount))
+
+    if len(s) <= 3:
+        # If the number has 3 or fewer digits (e.g. 500), no commas needed.
+        result = s
+    else:
+        # Split the string: last 3 digits go in one group, the rest get paired.
+        last3 = s[-3:]   # e.g. for "1234567"  →  last3 = "567"
+        rest  = s[:-3]   # e.g.                →  rest  = "1234"
+
+        groups = []                    # We'll collect the pairs here.
+        while len(rest) > 2:           # As long as there are more than 2 digits left...
+            groups.append(rest[-2:])   # ...grab the last 2 digits and save them.
+            rest = rest[:-2]           # Chop those 2 digits off.
+        if rest:                       # Whatever tiny piece is left (1 or 2 digits)...
+            groups.append(rest)        # ...add it too.
+
+        groups.reverse()               # We collected pairs right-to-left, so flip the list.
+        result = ",".join(groups) + "," + last3  # Stitch everything together with commas.
+
+    # Stick the ₹ symbol on the front.  If the original was negative, add a minus sign too.
+    if amount < 0:
+        return "-₹" + result
+    return "₹" + result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HELPER FUNCTION 2 — get_pct_color
+#  Decides whether to use GREEN (profit) or RED (loss) based on a number.
+# ══════════════════════════════════════════════════════════════════════════════
+def get_pct_color(val):
+    # If the value is zero or positive (we made money or broke even) → green.
+    # Otherwise (we lost money) → red.
+    if val >= 0:
+        return GREEN
+    return RED
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  MAIN REFRESH FUNCTION — recalculate_and_refresh
+#  Called every time the user adds a new investment.
+#  It re-adds up everything and updates every label on screen.
+# ══════════════════════════════════════════════════════════════════════════════
+def recalculate_and_refresh():
+    # ── Step 1: Add up all the money ──────────────────────────────────────────
+    total_val = 0   # Will hold current market value of all investments.
+    total_inv = 0   # Will hold the total amount the user originally put in.
+
+    for h in holdings_list:        # Loop through every holding in our notebook.
+        total_val += h["value"]    # Add its current value to the running total.
+        total_inv += h["invested"] # Add its invested amount to the running total.
+
+    # ── Step 2: Update the "Total Portfolio Value" big number on screen ───────
+    label_total_val.configure(text=format_inr(total_val))  # e.g. "₹12,34,567"
+    label_invested_val.configure(text=format_inr(total_inv))
+
+    # ── Step 3: Calculate Year-To-Date (YTD) percentage gain/loss ─────────────
+    gain_loss = total_val - total_inv   # How much money did we make or lose overall?
+
+    if total_inv > 0:
+        # Percentage = (profit / original investment) × 100
+        ytd_pct = (gain_loss / total_inv) * 100
+    else:
+        ytd_pct = 0.0   # Avoid dividing by zero if nothing invested yet.
+
+    sign = "+" if ytd_pct >= 0 else ""   # Add a "+" sign for positive numbers.
+    label_ytd.configure(
+        text=sign + str(round(ytd_pct, 1)) + "% YTD",
+        text_color=get_pct_color(ytd_pct)   # Green or red depending on profit/loss.
+    )
+
+    # ── Step 4: Simulate "Today's" return ────────────────────────────────────
+    # We don't have live data, so we pretend today's move is 32% of total gain.
+    # This is just a placeholder so the UI looks realistic.
+    today_gl  = gain_loss * 0.32
+    today_pct = (today_gl / total_val * 100) if total_val > 0 else 0.0
+
+    sign2 = "+" if today_pct >= 0 else ""
+    label_today_change.configure(
+        text=sign2 + str(round(today_pct, 2)) + "% today",
+        text_color=get_pct_color(today_pct)
+    )
+    label_today_ret.configure(
+        text=format_inr(today_gl),
+        text_color=get_pct_color(today_pct)
+    )
+    sign3 = "+" if today_pct >= 0 else ""
+    label_today_pct.configure(
+        text=sign3 + str(round(today_pct, 2)) + "%",
+        text_color=get_pct_color(today_pct)
+    )
+
+    # ── Step 5: Update the AI insight text on the right panel ─────────────────
+    if len(holdings_list) > 0:
+        # Sort holdings by current value, biggest first.
+        sorted_h  = sorted(holdings_list, key=lambda x: x["value"], reverse=True)
+        top_names = [sorted_h[0]["name"]]          # Always include the #1 holding.
+        if len(sorted_h) > 1:
+            top_names.append(sorted_h[1]["name"])  # If there's a #2, include it too.
+        top_str = " and ".join(top_names)           # e.g. "Reliance and Infosys"
+        label_ai_text.configure(
+            text="Your portfolio is led by " + top_str +
+                 ". Consider rebalancing if any single holding exceeds 40% of total value."
+        )
+    else:
+        label_ai_text.configure(
+            text="Add holdings to get personalized portfolio insights and recommendations."
+        )
+
+    # ── Step 6: Redraw the chart and rebuild the holdings grid ────────────────
+    draw_mini_chart(total_val, total_inv)  # Redraws the performance graph.
+    rebuild_holdings_grid()                # Redraws the holding cards below.
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HELPER FUNCTION 3 — lerp_color
+#  "lerp" = Linear Interpolation = smoothly mixing two colours.
+#  Imagine sliding a knob between RED and GREEN — midway gives you YELLOW.
+#  t=0.0  →  returns c1 exactly.
+#  t=0.5  →  returns the colour halfway between c1 and c2.
+#  t=1.0  →  returns c2 exactly.
+# ══════════════════════════════════════════════════════════════════════════════
+def lerp_color(c1, c2, t):
+    # Convert hex string "#rrggbb" into three separate numbers (red, green, blue).
+    # int(c1[1:3], 16) means: take characters 1-2 of the string and read them as
+    # a base-16 (hexadecimal) number.  e.g. "ff" → 255.
+    r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+    r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+
+    # Mix each channel: start + (end - start) × how_far_along
+    r = int(r1 + (r2 - r1) * t)
+    g = int(g1 + (g2 - g1) * t)
+    b = int(b1 + (b2 - b1) * t)
+
+    # Pack the three numbers back into a "#rrggbb" string.
+    # :02x means "write as 2-digit hex, pad with zero if needed".
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CHART DRAWING FUNCTION — draw_mini_chart   ✅ NOW WITH REAL DATE/TIME LABELS
+#  Draws the animated performance line chart on the canvas widget.
+#
+#  Think of the canvas like a blank piece of paper.
+#  We:  1. Draw faint horizontal grid lines (like notebook lines).
+#       2. Calculate 8 data points (Jan → Now) on a smooth curve.
+#       3. Fill the area under the curve with a pretty gradient.
+#       4. Draw the bright teal line on top.
+#       5. Put date labels along the bottom.  ← NEW: real calendar dates!
+# ══════════════════════════════════════════════════════════════════════════════
+def draw_mini_chart(total_val, total_inv):
+    import calendar
+
+    chart_canvas.delete("all")
+
+    w = chart_canvas.winfo_width()
+    h = chart_canvas.winfo_height()
+    if w < 10 or h < 10:
+        chart_canvas.after(100, lambda: draw_mini_chart(total_val, total_inv))
+        return
+
+    # ── Padding ───────────────────────────────────────────────────────────────
+    pad_left   = 56   # space on left for ₹ axis labels
+    pad_right  = 16
+    pad_top    = 14
+    pad_bottom = 46   # extra room for two-line date+time labels at the bottom
+
+    chart_w = w - pad_left - pad_right
+    chart_h = h - pad_top  - pad_bottom
+
+    # ── EMPTY STATE: no investments added yet ─────────────────────────────────
+    # If nobody has pressed "+ New Investment" yet, portfolio_history is empty.
+    # Draw a flat dashed line at mid-height with a friendly label.
+    if len(portfolio_history) == 0:
+        mid_y = pad_top + chart_h // 2
+        # Dashed line: draw short segments manually (tkinter dash support is unreliable)
+        seg = 8
+        x = pad_left
+        while x < w - pad_right:
+            chart_canvas.create_line(x, mid_y, min(x + seg, w - pad_right), mid_y,
+                                     fill=BORDER, width=1)
+            x += seg * 2
+        chart_canvas.create_text(w // 2, mid_y - 14,
+                                  text="Add an investment to see your chart",
+                                  fill=MUTED, font=("Segoe UI", 9), anchor="s")
+        return
+
+    # ── SINGLE POINT: exactly one investment added ────────────────────────────
+    # We only have one dot in history — can't draw a line yet.
+    # Show the single point with its timestamp and a label.
+    if len(portfolio_history) == 1:
+        ts, val, inv = portfolio_history[0]
+        dot_x = pad_left + chart_w // 2
+        dot_y = pad_top  + chart_h // 2
+
+        # Horizontal reference line (invested amount baseline)
+        chart_canvas.create_line(pad_left, dot_y, w - pad_right, dot_y,
+                                  fill=BORDER, width=1)
+
+        # The single data point dot
+        chart_canvas.create_oval(dot_x - 5, dot_y - 5, dot_x + 5, dot_y + 5,
+                                  fill=ACCENT, outline=CARD)
+
+        # Value label above the dot
+        chart_canvas.create_text(dot_x, dot_y - 10,
+                                  text=format_inr(val),
+                                  fill=TEXT, font=("Segoe UI", 9, "bold"), anchor="s")
+
+        # Timestamp label below the dot  (e.g.  "30 Apr 2026  14:35")
+        time_str = ts.strftime("%d %b %Y  %H:%M")
+        chart_canvas.create_text(dot_x, dot_y + 10,
+                                  text=time_str,
+                                  fill=ACCENT, font=("Segoe UI", 8), anchor="n")
+        return
+
+    # ── MULTIPLE POINTS: build the real chart from portfolio_history ──────────
+    # Each entry in portfolio_history is (datetime, total_value, total_invested).
+    # We use these directly — no fake interpolation at all.
+
+    y_values = [entry[1] for entry in portfolio_history]   # list of portfolio values
+    timestamps = [entry[0] for entry in portfolio_history] # list of datetimes
+
+    mn  = min(y_values)
+    mx  = max(y_values)
+    rng = mx - mn if mx != mn else 1   # avoid division by zero if all values equal
+
+    # Give a little visual breathing room so the line doesn't hug the very top/bottom
+    mn_display = mn * 0.97
+    mx_display = mx * 1.03
+    rng_display = mx_display - mn_display
+
+    num_points = len(y_values)
+
+    # ── Y-axis grid lines and ₹ labels ────────────────────────────────────────
+    num_grid = 4
+    for i in range(num_grid + 1):
+        grid_y   = pad_top + (chart_h / num_grid) * i
+        raw_val  = mx_display - (rng_display / num_grid) * i
+
+        chart_canvas.create_line(pad_left, grid_y, w - pad_right, grid_y,
+                                  fill="#1e2d3d", width=1)
+
+        tick = ("₹" + str(int(raw_val // 1000)) + "k") if raw_val >= 100_000 else ("₹" + str(int(raw_val)))
+        chart_canvas.create_text(pad_left - 4, grid_y, text=tick,
+                                  anchor="e", fill=MUTED, font=("Segoe UI", 8))
+
+    # ── Convert values → pixel coordinates ───────────────────────────────────
+    coords = []
+    for i, val in enumerate(y_values):
+        x = pad_left + (i / (num_points - 1)) * chart_w
+        y = pad_top  + chart_h - ((val - mn_display) / rng_display) * chart_h
+        coords.append((x, y))
+
+    # ── Gradient fill under the line ─────────────────────────────────────────
+    bottom_y = pad_top + chart_h
+
+    fill_pts = list(coords)
+    fill_pts.append((coords[-1][0], bottom_y))
+    fill_pts.append((coords[0][0],  bottom_y))
+    flat = []
+    for pt in fill_pts:
+        flat.extend(pt)
+
+    chart_canvas.create_polygon(flat, fill="#004530", outline="")
+
+    num_fill_steps = 36
+    for step in range(num_fill_steps):
+        frac  = step / num_fill_steps
+        color = lerp_color("#005a3c", CARD, frac)
+        strip_y_start = int(pad_top + chart_h * frac)
+        strip_y_end   = strip_y_start + max(1, int(chart_h / num_fill_steps))
+        chart_canvas.create_rectangle(coords[0][0], strip_y_start,
+                                       coords[-1][0], strip_y_end,
+                                       fill=color, outline="")
+
+    chart_canvas.create_polygon(flat, fill="#004530", outline="")
+
+    # ── Draw the line between real data points ────────────────────────────────
+    for i in range(len(coords) - 1):
+        x1, y1 = coords[i]
+        x2, y2 = coords[i + 1]
+        chart_canvas.create_line(x1, y1, x2, y2, fill=ACCENT, width=2, smooth=True)
+
+    # ── Dot on every real data point ──────────────────────────────────────────
+    for i, (cx, cy) in enumerate(coords):
+        is_last = (i == len(coords) - 1)
+        r = 5 if is_last else 3
+        chart_canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
+                                  fill=ACCENT, outline=CARD)
+
+    # ── X-axis date/time labels — ONE label per real data point ───────────────
+    # Each label is the actual datetime the user pressed "+ New Investment".
+    # Format:  "30 Apr"  on the first line,  "14:35"  on the second line.
+    # The LAST label also gets a "Now" prefix and is shown in bright teal.
+    for i, ts in enumerate(timestamps):
+        cx = coords[i][0]
+        date_line = ts.strftime("%d %b")     # e.g. "30 Apr"
+        time_line = ts.strftime("%H:%M")     # e.g. "14:35"
+        label_text = date_line + "\n" + time_line
+
+        is_last = (i == len(timestamps) - 1)
+        colour   = ACCENT if is_last else MUTED
+        weight   = "bold"  if is_last else "normal"
+
+        chart_canvas.create_text(cx, bottom_y + 5,
+                                  text=label_text,
+                                  fill=colour,
+                                  font=("Segoe UI", 7, weight),
+                                  anchor="n",
+                                  justify="center")
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  HOLDINGS GRID BUILDER — rebuild_holdings_grid
+#  Clears and redraws the card grid showing each investment.
+# ══════════════════════════════════════════════════════════════════════════════
+def rebuild_holdings_grid():
+    # Destroy every existing widget inside the holdings_frame.
+    # This is like erasing the whiteboard before writing fresh info.
+    for widget in holdings_frame.winfo_children():
+        widget.destroy()
+
+    # If the user hasn't added anything yet, show a friendly empty state message.
+    if len(holdings_list) == 0:
+        empty_lbl = ctk.CTkLabel(
+            holdings_frame,
+            text="No holdings yet  ·  click + New Investment",
+            font=("Segoe UI", 11),
+            text_color=MUTED
+        )
+        empty_lbl.grid(row=0, column=0, columnspan=3, pady=30)
+        return
+
+    # Layout: 3 cards per row.  col tracks the current column (0, 1, 2).
+    col = 0
+    row = 0
+
+    for h in holdings_list:
+        # Calculate profit/loss for this individual holding.
+        gl = h["value"] - h["invested"]
+        pct = (gl / h["invested"] * 100) if h["invested"] > 0 else 0.0
+
+        # ── Build the card frame ──────────────────────────────────────────────
+        card = ctk.CTkFrame(
+            holdings_frame,
+            fg_color=CARD,        # Card background colour.
+            corner_radius=12,     # Rounded corners.
+            border_width=1,
+            border_color=BORDER
+        )
+        card.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+        card.columnconfigure(1, weight=1)   # Middle column stretches to fill space.
+
+        # ── Coloured icon square (top-left of card) ───────────────────────────
+        # Think of it as a little avatar badge for the asset.
+        icon_frame = ctk.CTkFrame(
+            card,
+            fg_color=h["color"],   # e.g. blue, orange, teal — set when user added it.
+            width=42, height=42,
+            corner_radius=10
+        )
+        icon_frame.grid(row=0, column=0, rowspan=2, padx=(12, 8), pady=12)
+        icon_frame.grid_propagate(False)   # grid_propagate(False) = don't resize to children.
+
+        icon_lbl = ctk.CTkLabel(
+            icon_frame,
+            text=h["letter"],              # First letter of the ticker, e.g. "R" for Reliance.
+            font=("Segoe UI", 16, "bold"),
+            text_color="#ffffff"
+        )
+        icon_lbl.place(relx=0.5, rely=0.5, anchor="center")   # Centre the letter in the badge.
+
+        # ── Name label ────────────────────────────────────────────────────────
+        name_lbl = ctk.CTkLabel(card, text=h["name"],
+                                 font=("Segoe UI", 13, "bold"), text_color=TEXT)
+        name_lbl.grid(row=0, column=1, sticky="sw", pady=(12, 0))
+
+        # ── Subtitle (e.g. "45 shares · Equity") ─────────────────────────────
+        sub_lbl = ctk.CTkLabel(card, text=h["sub"],
+                                font=("Segoe UI", 10), text_color=MUTED)
+        sub_lbl.grid(row=1, column=1, sticky="nw", pady=(0, 12))
+
+        # ── Current value (top-right of card) ─────────────────────────────────
+        val_lbl = ctk.CTkLabel(card, text=format_inr(h["value"]),
+                                font=("Segoe UI", 13, "bold"), text_color=TEXT)
+        val_lbl.grid(row=0, column=2, sticky="se", padx=(8, 12), pady=(12, 0))
+
+        # ── Percentage gain/loss (bottom-right of card) ───────────────────────
+        sign = "+" if pct >= 0 else ""
+        pct_lbl = ctk.CTkLabel(
+            card,
+            text=sign + str(round(pct, 1)) + "%",
+            font=("Segoe UI", 11),
+            text_color=get_pct_color(pct)
+        )
+        pct_lbl.grid(row=1, column=2, sticky="ne", padx=(8, 12), pady=(0, 12))
+
+        # ── Move to next column; wrap to new row every 3 cards ────────────────
+        col += 1
+        if col == 3:
+            col = 0
+            row += 1
+
+    # Make all 3 columns share width equally.
+    for c in range(3):
+        holdings_frame.columnconfigure(c, weight=1)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ADD INVESTMENT FORM — show_add_form
+#  Opens a small popup window with fields to enter a new holding.
+# ══════════════════════════════════════════════════════════════════════════════
+def show_add_form():
+    # CTkToplevel = a child window that floats on top of the main app.
+    form_window = ctk.CTkToplevel(app)
+    form_window.title("Add Investment")
+    form_window.geometry("400x370")      # Width × Height in pixels.
+    form_window.resizable(False, False)  # Lock size so it doesn't stretch oddly.
+    form_window.configure(fg_color=BG)
+    form_window.grab_set()               # grab_set = block clicks on main window until this closes.
+
+    # ── Title heading inside the form ─────────────────────────────────────────
+    title_lbl = ctk.CTkLabel(form_window, text="Add Investment",
+                              font=("Segoe UI", 15, "bold"), text_color=TEXT)
+    title_lbl.pack(anchor="w", padx=20, pady=(18, 12))
+
+    # ── Row 1: Asset Name + Ticker ────────────────────────────────────────────
+    # We use a CTkFrame as a container so we can place two inputs side-by-side.
+    row1 = ctk.CTkFrame(form_window, fg_color="transparent")
+    row1.pack(fill="x", padx=20, pady=4)
+    row1.columnconfigure(0, weight=1)   # Both columns stretch equally.
+    row1.columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(row1, text="Asset Name", font=("Segoe UI", 10),
+                  text_color=MUTED).grid(row=0, column=0, sticky="w")
+    entry_name = ctk.CTkEntry(row1, placeholder_text="e.g. Reliance",
+                               fg_color=INPUTBG, border_color=BORDER,
+                               text_color=TEXT, placeholder_text_color=MUTED)
+    entry_name.grid(row=1, column=0, sticky="ew", padx=(0, 6))
+
+    ctk.CTkLabel(row1, text="Ticker", font=("Segoe UI", 10),
+                  text_color=MUTED).grid(row=0, column=1, sticky="w")
+    entry_ticker = ctk.CTkEntry(row1, placeholder_text="RELIANCE",
+                                 fg_color=INPUTBG, border_color=BORDER,
+                                 text_color=TEXT, placeholder_text_color=MUTED)
+    entry_ticker.grid(row=1, column=1, sticky="ew", padx=(6, 0))
+
+    # ── Row 2: Type + Subtitle ────────────────────────────────────────────────
+    row2 = ctk.CTkFrame(form_window, fg_color="transparent")
+    row2.pack(fill="x", padx=20, pady=4)
+    row2.columnconfigure(0, weight=1)
+    row2.columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(row2, text="Type", font=("Segoe UI", 10),
+                  text_color=MUTED).grid(row=0, column=0, sticky="w")
+    # CTkComboBox = a dropdown menu.  "values" is the list of choices.
+    combo_type = ctk.CTkComboBox(row2,
+                                  values=["Equity", "Crypto", "Mutual Fund", "ETF", "Bond"],
+                                  fg_color=INPUTBG, border_color=BORDER,
+                                  text_color=TEXT, button_color=BORDER,
+                                  dropdown_fg_color=CARD)
+    combo_type.set("Equity")    # Default selection.
+    combo_type.grid(row=1, column=0, sticky="ew", padx=(0, 6))
+
+    ctk.CTkLabel(row2, text="Subtitle", font=("Segoe UI", 10),
+                  text_color=MUTED).grid(row=0, column=1, sticky="w")
+    entry_sub = ctk.CTkEntry(row2, placeholder_text="45 shares · Equity",
+                               fg_color=INPUTBG, border_color=BORDER,
+                               text_color=TEXT, placeholder_text_color=MUTED)
+    entry_sub.grid(row=1, column=1, sticky="ew", padx=(6, 0))
+
+    # ── Row 3: Invested Amount + Current Value ────────────────────────────────
+    row3 = ctk.CTkFrame(form_window, fg_color="transparent")
+    row3.pack(fill="x", padx=20, pady=4)
+    row3.columnconfigure(0, weight=1)
+    row3.columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(row3, text="Invested (₹)", font=("Segoe UI", 10),
+                  text_color=MUTED).grid(row=0, column=0, sticky="w")
+    entry_invested = ctk.CTkEntry(row3, placeholder_text="100000",
+                                   fg_color=INPUTBG, border_color=BORDER,
+                                   text_color=TEXT, placeholder_text_color=MUTED)
+    entry_invested.grid(row=1, column=0, sticky="ew", padx=(0, 6))
+
+    ctk.CTkLabel(row3, text="Current Value (₹)", font=("Segoe UI", 10),
+                  text_color=MUTED).grid(row=0, column=1, sticky="w")
+    entry_value = ctk.CTkEntry(row3, placeholder_text="128450",
+                                fg_color=INPUTBG, border_color=BORDER,
+                                text_color=TEXT, placeholder_text_color=MUTED)
+    entry_value.grid(row=1, column=1, sticky="ew", padx=(6, 0))
+
+    # ── Row 4: Icon Colour Picker ─────────────────────────────────────────────
+    row4 = ctk.CTkFrame(form_window, fg_color="transparent")
+    row4.pack(fill="x", padx=20, pady=4)
+
+    ctk.CTkLabel(row4, text="Icon Color", font=("Segoe UI", 10),
+                  text_color=MUTED).pack(anchor="w")
+
+    # Parallel lists: colour names shown to user ↔ actual hex values used in code.
+    color_options = ["Blue",    "Orange",  "Teal",    "Purple",  "Red",     "Green",   "Yellow" ]
+    color_values  = ["#3b82f6", "#f97316", "#00d4aa", "#a78bfa", "#f43f5e", "#22c55e", "#eab308"]
+
+    combo_color = ctk.CTkComboBox(row4, values=color_options,
+                                   fg_color=INPUTBG, border_color=BORDER,
+                                   text_color=TEXT, button_color=BORDER,
+                                   dropdown_fg_color=CARD)
+    combo_color.set("Blue")
+    combo_color.pack(fill="x")
+
+    # ── Inner function: do_add — runs when user clicks "Add to Portfolio" ──────
+    # This is a "closure" — a function defined inside another function.
+    # It can access the entry widgets defined above because Python allows that.
+    def do_add():
+        # Read and clean up all the form field values.
+        name           = entry_name.get().strip()           # .get() reads the typed text.
+        ticker         = entry_ticker.get().strip().upper() # .upper() = RELIANCE not reliance.
+        asset_type     = combo_type.get()
+        sub            = entry_sub.get().strip()
+        inv_str        = entry_invested.get().strip()
+        val_str        = entry_value.get().strip()
+        chosen_color_name = combo_color.get()
+
+        # ── Validation: check that required fields are filled correctly ────────
+        if name == "":
+            messagebox.showerror("Missing Field", "Please enter an asset name.",
+                                  parent=form_window)
+            return   # Stop here — don't add anything.
+
+        # .replace(".", "", 1) removes one decimal point before checking all digits.
+        # This lets us accept "128450.50" but reject "abc".
+        if inv_str == "" or not inv_str.replace(".", "", 1).isdigit():
+            messagebox.showerror("Invalid Input", "Please enter a valid invested amount.",
+                                  parent=form_window)
+            return
+
+        if val_str == "" or not val_str.replace(".", "", 1).isdigit():
+            messagebox.showerror("Invalid Input", "Please enter a valid current value.",
+                                  parent=form_window)
+            return
+
+        # Convert string inputs to float numbers.
+        invested = float(inv_str)
+        value    = float(val_str)
+
+        # If ticker was left blank, use the first letter of the name as the badge letter.
+        if ticker == "":
+            ticker = name[0].upper()
+
+        # If subtitle was left blank, fall back to the asset type.
+        if sub == "":
+            sub = asset_type
+
+        # Find the hex colour that matches the chosen colour name.
+        picked_color = "#3b82f6"   # Default: blue.
+        for idx, cname in enumerate(color_options):
+            if cname == chosen_color_name:
+                picked_color = color_values[idx]
+                break
+
+        # Build the holding dictionary and add it to our global notebook.
+        # datetime.now() stamps the exact moment this investment was added.
+        new_holding = {
+            "name":     name,
+            "ticker":   ticker,
+            "type":     asset_type,
+            "sub":      sub,
+            "invested": invested,
+            "value":    value,
+            "color":    picked_color,
+            "letter":   ticker[0],
+            "added_at": datetime.now()   # real timestamp — used by the chart X-axis
+        }
+        holdings_list.append(new_holding)
+
+        # Snapshot the portfolio total RIGHT NOW and store it in history.
+        # The chart only ever plots these real snapshots — no fake interpolated past.
+        total_v = sum(h["value"]    for h in holdings_list)
+        total_i = sum(h["invested"] for h in holdings_list)
+        portfolio_history.append((datetime.now(), total_v, total_i))
+
+        form_window.destroy()        # Close the popup.
+        recalculate_and_refresh()    # Refresh all numbers and charts.
+
+    # ── Submit button ──────────────────────────────────────────────────────────
+    add_btn = ctk.CTkButton(
+        form_window,
+        text="Add to Portfolio",
+        fg_color=ACCENT,
+        text_color=BG,
+        font=("Segoe UI", 12, "bold"),
+        hover_color="#00b899",   # Slightly darker teal when mouse hovers.
+        command=do_add           # Call do_add() when clicked.
+    )
+    add_btn.pack(fill="x", padx=20, pady=(10, 18))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  AI INSIGHT POPUP — ask_ai_insight
+#  Shows a summary messagebox with portfolio breakdown.
+#  (A real version would call an AI API — this is a clean local version.)
+# ══════════════════════════════════════════════════════════════════════════════
+def ask_ai_insight():
+    if len(holdings_list) == 0:
+        messagebox.showinfo("AI Insight",
+                            "Add holdings first to get portfolio insights.")
+        return
+
+    total_val = sum(h["value"]    for h in holdings_list)   # Sum all current values.
+    total_inv = sum(h["invested"] for h in holdings_list)   # Sum all invested amounts.
+
+    lines = ["Portfolio Analysis\n"]
+    lines.append("Total Invested : " + format_inr(total_inv))
+    lines.append("Current Value  : " + format_inr(total_val))
+
+    gain = total_val - total_inv
+    gain_pct = (gain / total_inv * 100) if total_inv > 0 else 0.0
+    sign = "+" if gain >= 0 else ""
+    lines.append("Overall P&L    : " + sign + format_inr(gain) +
+                 " (" + sign + str(round(gain_pct, 1)) + "%)\n")
+
+    lines.append("Holdings Breakdown:")
+    for h in holdings_list:
+        gl  = h["value"] - h["invested"]
+        p   = (gl / h["invested"] * 100) if h["invested"] > 0 else 0.0
+        s   = "+" if p >= 0 else ""
+        lines.append("  " + h["name"] + " : " + format_inr(h["value"]) +
+                     " (" + s + str(round(p, 1)) + "%)")
+
+    # Join all lines with newline characters and show as a popup box.
+    messagebox.showinfo("AI Wealth Insight", "\n".join(lines))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  BUILD THE MAIN WINDOW  — This is where we construct all the visible widgets.
+#
+#  Layout overview:
+#  ┌─────────────────────────────────────────────────────────────┐
+#  │  Top Bar:  "Investments"  title           [+ New Investment]│
+#  ├──────────────────────────────────────┬──────────────────────┤
+#  │  Left Column (weight=3)              │  Right Column (w=1)  │
+#  │  ┌──────────────────────────────┐    │  [Invested Capital]  │
+#  │  │  Chart card (line graph)     │    │  [Today's Return]    │
+#  │  └──────────────────────────────┘    │  [AI Insight]        │
+#  │  Holdings  (scrollable card grid)    │                      │
+#  └──────────────────────────────────────┴──────────────────────┘
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Create the main application window ───────────────────────────────────────
+app = ctk.CTk()                          # CTk() is the root application window.
+app.title("Investments Dashboard")       # Window title bar text.
+app.geometry("1100x700")                 # Initial size: 1100 wide × 700 tall pixels.
+app.configure(fg_color=BG)               # Set background colour.
+app.resizable(True, True)                # Allow the user to resize the window.
+
+# ── Top bar (title + button row) ──────────────────────────────────────────────
+top_bar = ctk.CTkFrame(app, fg_color=BG, height=50)
+top_bar.pack(fill="x", padx=16, pady=(16, 0))   # fill="x" stretches the whole width.
+top_bar.pack_propagate(False)                    # Keep height fixed at 50px.
+
+title_label = ctk.CTkLabel(top_bar, text="Investments",
+                            font=("Segoe UI", 20, "bold"), text_color=TEXT)
+title_label.pack(side="left", pady=10)   # Push to the left side.
+
+new_btn = ctk.CTkButton(
+    top_bar,
+    text="+ New Investment",
+    fg_color=CARD,
+    border_width=1,
+    border_color=BORDER,
+    text_color=TEXT,
+    corner_radius=20,         # Very rounded → pill shape.
+    font=("Segoe UI", 12),
+    hover_color=BORDER,
+    command=show_add_form     # Open the form popup when clicked.
+)
+new_btn.pack(side="right", pady=10)   # Push to the right side.
+
+# ── Main content area: two-column grid ───────────────────────────────────────
+main_frame = ctk.CTkFrame(app, fg_color=BG)
+main_frame.pack(fill="both", expand=True, padx=16, pady=12)
+main_frame.columnconfigure(0, weight=3)   # Left column gets 3× more space than right.
+main_frame.columnconfigure(1, weight=1)   # Right column.
+main_frame.rowconfigure(0, weight=1)      # The one row stretches vertically.
+
+# ── Left column ───────────────────────────────────────────────────────────────
+left_col = ctk.CTkFrame(main_frame, fg_color=BG)
+left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 7))   # nsew = stretch all directions.
+
+# ── Right column ──────────────────────────────────────────────────────────────
+right_col = ctk.CTkFrame(main_frame, fg_color=BG)
+right_col.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
+
+# ── Chart card (inside left column) ───────────────────────────────────────────
+chart_card = ctk.CTkFrame(left_col, fg_color=CARD,
+                            corner_radius=14, border_width=1, border_color=BORDER)
+chart_card.pack(fill="x", pady=(0, 12))   # Sits at the top of the left column.
+
+# Header row inside the chart card: big value on left, YTD % on right.
+chart_top = ctk.CTkFrame(chart_card, fg_color="transparent")
+chart_top.pack(fill="x", padx=20, pady=(18, 0))
+
+chart_top_left = ctk.CTkFrame(chart_top, fg_color="transparent")
+chart_top_left.pack(side="left")
+
+ctk.CTkLabel(chart_top_left, text="TOTAL PORTFOLIO VALUE",
+              font=("Segoe UI", 10), text_color=MUTED).pack(anchor="w")
+
+# This label will be updated whenever recalculate_and_refresh() runs.
+label_total_val = ctk.CTkLabel(chart_top_left, text="₹0",
+                                font=("Segoe UI", 32, "bold"), text_color=TEXT)
+label_total_val.pack(anchor="w")
+
+# YTD label — sits on the right side of the chart header.
+label_ytd = ctk.CTkLabel(chart_top, text="+0% YTD",
+                           font=("Segoe UI", 11), text_color=ACCENT)
+label_ytd.pack(side="right", anchor="n", pady=6)
+
+# "Live" indicator row — shows the live dot + today's percentage.
+live_row = ctk.CTkFrame(chart_card, fg_color="transparent")
+live_row.pack(fill="x", padx=20, pady=(4, 0))
+
+# We use a raw tkinter Canvas to draw the tiny green dot (customtkinter has no dot widget).
+live_dot_canvas = tk.Canvas(live_row, width=10, height=10,
+                              bg=CARD, highlightthickness=0)
+live_dot_canvas.create_oval(1, 1, 9, 9, fill=ACCENT, outline="")   # Draw a circle.
+live_dot_canvas.pack(side="left", pady=3)
+
+ctk.CTkLabel(live_row, text="  LIVE  ·  ",
+              font=("Segoe UI", 11), text_color=TEXT).pack(side="left")
+
+label_today_change = ctk.CTkLabel(live_row, text="+0% today",
+                                   font=("Segoe UI", 11), text_color=ACCENT)
+label_today_change.pack(side="left")
+
+# The chart canvas — this is the drawing board for the line graph.
+# Height is fixed at 200px.  Width stretches to fill the card.
+chart_canvas = tk.Canvas(chart_card, height=240, bg=CARD, highlightthickness=0)
+chart_canvas.pack(fill="x", padx=20, pady=(6, 16))
+
+# ── Holdings section (below the chart) ────────────────────────────────────────
+holdings_header = ctk.CTkLabel(left_col, text="Holdings",
+                                font=("Segoe UI", 16, "bold"), text_color=TEXT)
+holdings_header.pack(anchor="w", pady=(0, 8))
+
+# CTkScrollableFrame = a frame with a scrollbar for when cards overflow.
+holdings_scroll = ctk.CTkScrollableFrame(left_col, fg_color=BG,
+                                          scrollbar_button_color=BORDER)
+holdings_scroll.pack(fill="both", expand=True)
+
+# Inner frame that holds the actual card grid.
+holdings_frame = ctk.CTkFrame(holdings_scroll, fg_color=BG)
+holdings_frame.pack(fill="both", expand=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  RIGHT COLUMN CARDS
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Invested Capital card ─────────────────────────────────────────────────────
+invested_card = ctk.CTkFrame(right_col, fg_color=CARD,
+                               corner_radius=14, border_width=1, border_color=BORDER)
+invested_card.pack(fill="x", pady=(0, 10))
+
+ctk.CTkLabel(invested_card, text="INVESTED CAPITAL",
+              font=("Segoe UI", 10), text_color=MUTED).pack(anchor="w", padx=18, pady=(16, 4))
+
+label_invested_val = ctk.CTkLabel(invested_card, text="₹0",
+                                   font=("Segoe UI", 26, "bold"), text_color=TEXT)
+label_invested_val.pack(anchor="w", padx=18)
+
+# A small teal progress bar drawn on a Canvas.
+bar_canvas = tk.Canvas(invested_card, height=6, bg=CARD, highlightthickness=0)
+bar_canvas.pack(fill="x", padx=18, pady=(8, 16))
+
+def draw_teal_bar(event=None):
+    bar_canvas.delete("all")
+    w = bar_canvas.winfo_width()
+    # Draw a rectangle from left edge to 70% of the bar width.
+    bar_canvas.create_rectangle(0, 1, int(w * 0.7), 5, fill=ACCENT, outline="")
+
+bar_canvas.bind("<Configure>", draw_teal_bar)   # Redraw bar whenever its size changes.
+
+# ── Today's Return card ───────────────────────────────────────────────────────
+today_card = ctk.CTkFrame(right_col, fg_color=CARD,
+                            corner_radius=14, border_width=1, border_color=BORDER)
+today_card.pack(fill="x", pady=(0, 10))
+
+ctk.CTkLabel(today_card, text="TODAY'S RETURN",
+              font=("Segoe UI", 10), text_color=MUTED).pack(anchor="w", padx=18, pady=(16, 4))
+
+label_today_ret = ctk.CTkLabel(today_card, text="₹0",
+                                font=("Segoe UI", 24, "bold"), text_color=ACCENT)
+label_today_ret.pack(anchor="w", padx=18)
+
+label_today_pct = ctk.CTkLabel(today_card, text="+0%",
+                                font=("Segoe UI", 12), text_color=GREEN)
+label_today_pct.pack(anchor="w", padx=18, pady=(0, 16))
+
+# ── AI Wealth Insight card ────────────────────────────────────────────────────
+ai_card = ctk.CTkFrame(right_col, fg_color=CARD,
+                         corner_radius=14, border_width=1, border_color=BORDER)
+ai_card.pack(fill="both", expand=True)   # expand=True makes this fill remaining space.
+
+ctk.CTkLabel(ai_card, text="AI WEALTH INSIGHT",
+              font=("Segoe UI", 10, "bold"), text_color=ACCENT).pack(anchor="w", padx=18, pady=(16, 6))
+
+label_ai_text = ctk.CTkLabel(
+    ai_card,
+    text="Add holdings to get personalized portfolio insights and recommendations.",
+    font=("Segoe UI", 12),
+    text_color=MUTED,
+    wraplength=240,   # Wrap text after 240px so it doesn't overflow the card.
+    justify="left"
+)
+label_ai_text.pack(anchor="w", padx=18, pady=(0, 12))
+
+ai_btn = ctk.CTkButton(
+    ai_card,
+    text="View AI Recommendations →",
+    fg_color=CARD,
+    border_width=1,
+    border_color=BORDER,
+    text_color=TEXT,
+    font=("Segoe UI", 11),
+    hover_color="#1c2128",
+    anchor="w",
+    command=ask_ai_insight
+)
+ai_btn.pack(fill="x", padx=18, pady=(0, 16))
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  INITIAL RENDER + EVENT LOOP
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Do a first pass to set all labels to their zero/empty states.
+recalculate_and_refresh()
+
+# app.mainloop() = "start listening for events (clicks, key presses, redraws)".
+# This call BLOCKS — the script stays here until the user closes the window.
+# Think of it as pressing "play" on the whole interactive app.
+app.mainloop()
