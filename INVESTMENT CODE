@@ -422,6 +422,63 @@ def addform():
 
     ctk.CTkLabel(r2, text="Subtitle", font=("Segoe UI", 10),text_color="#e6edf3").grid(row=0, column=1, sticky="w")
     es = ctk.CTkEntry(r2, placeholder_text="45 shares · Equity",  fg_color="#0d1117", border_color="#2a3441", text_color="#e6edf3" , placeholder_text_color="#e6edf3" )
-    entry_sub.grid(row=1, column=1, sticky="ew", padx=(6, 0))
+    es.grid(row=1, column=1, sticky="ew", padx=(6, 0))
+
+    r3 = ctk.CTkFrame(fw, fg_color="transparent")
+    r3.pack(fill="x", padx=20, pady=4)
+    r3.columnconfigure(0, weight=1)
+    r3.columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(r3, text="Invested (₹)", font=("Segoe UI", 10), text_color="#e6edf3").grid(row=0, column=0, sticky="w")
+    ed = ctk.CTkEntry(r3, placeholder_text="100000",fg_color="#0d1117" , border_color="#2a3441" ,text_color="#e6edf3", placeholder_text_color="#e6edf3")
+    ed.grid(row=1, column=0, sticky="ew", padx=(0, 6))
+
+    ctk.CTkLabel(r3, text="Current Value (₹)", font=("Segoe UI", 10),text_color="#e6edf3").grid(row=0, column=1, sticky="w")
+    eV = ctk.CTkEntry(r3, placeholder_text="128450",fg_color="#0d1117", border_color="#2a3441",text_color="#e6edf3", placeholder_text_color="#e6edf3")
+    eV.grid(row=1, column=1, sticky="ew", padx=(6, 0))
+
+    
+    r4 = ctk.CTkFrame(form_window, fg_color="transparent")
+    r4.pack(fill="x", padx=20, pady=4)
+
+    ctk.CTkLabel(r4, text="Icon Color", font=("Segoe UI", 10),text_color="#e6edf3" ).pack(anchor="w")
+
+    
+    con= ["Blue",    "Orange",  "Teal",    "Purple",  "Red",     "Green",   "Yellow" ]
+    cov =["#3b82f6", "#f97316", "#00d4aa", "#a78bfa", "#f43f5e", "#22c55e", "#eab308"]
+
+    cco = ctk.CTkComboBox(r4, values=con,fg_color=INPUTBG, border_color=BORDER,text_color=TEXT, button_color=BORDER,dropdown_fg_color=CARD)
+    cco.set("Blue")
+    cco.pack(fill="x")
+
+    def doadd():
+       
+        nr  = eNe.get()
+        Nm=nr.strip()
+
+        tr = eti.get()
+        trs= tr.strip()
+        T = t.upper()
+
+
+        ast = ct.get()
+        sr= es.get()
+        sb = sr.strip()
+
+
+        iNVr = ed.get()
+        ins = iNVr.strip()
+
+
+        vALr=eV.get()
+        vals = vALr.strip()
+        ccn = cco.get()
+
+        if name == " ":
+            messagebox.showerror("Missing Field", "Please enter an asset name.",parent=fw)
+            return   
+
+
+
   
         
