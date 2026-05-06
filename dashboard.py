@@ -1,6 +1,6 @@
 import customtkinter as ctk
 from PIL import Image
-from sidebar import side
+from sidebar import sideb
 
 #main window opening
 win=ctk.CTk()
@@ -19,7 +19,7 @@ fra.grid_columnconfigure(0,weight=0)
 fra.grid_columnconfigure(1,weight=1)
 fra.grid_rowconfigure(0,weight=1)
 
-side(fra)
+sideb(fra)
 
 #getting all the images here
 trykare=ctk.CTkImage(dark_image=Image.open("wave.jpeg"),size=(1274,784)) #bg
