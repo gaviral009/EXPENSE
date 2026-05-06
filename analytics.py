@@ -1,8 +1,8 @@
 import customtkinter as ctk
-from PIL import Image
 from sidebar import sideb
 import matplotlib.pyplot as map
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from CTkTable import CTkTable
 
 #main window opening
 win=ctk.CTk()
@@ -32,7 +32,7 @@ Ana=ctk.CTkLabel(an,text='Analytics',text_color='white',font=('Algerian',50))
 Ana.pack(pady=(70,30),anchor='nw',padx=50)
 
 scroll=ctk.CTkScrollableFrame(an,width=1200,height=600)
-scroll.pack()
+scroll.pack(fill='both',expand=True)
 cards=ctk.CTkFrame(scroll,width=1200,height=120)
 cards.pack()
 
@@ -85,8 +85,9 @@ canvas1.get_tk_widget().pack(fill='both',expand=True)
 criteria={'Travel':10,'Shopping':10,'Miscellaneous':15,'Subscriptions':5,'Essentials':10,'Healthcare':10,'Education':10,'Food':10,'Loans':10,'Housing':10}
 cr=list(criteria.keys())
 per=list(criteria.values())
-
-g2=ctk.CTkFrame(scroll,width=600,height=400)
+row2=ctk.CTkFrame(scroll,width=1200,height=400)
+row2.pack(fill='both')
+g2=ctk.CTkFrame(row2,width=600,height=400)
 g2.pack(fill='both',padx=10,pady=10,side='left')
 g2.pack_propagate(False)
 
@@ -108,7 +109,7 @@ canvas2=FigureCanvasTkAgg(fig2,master=g2)
 canvas2.draw()
 canvas2.get_tk_widget().pack(fill='both',expand=True,side='left')
 
-g3=ctk.CTkFrame(scroll,width=600,height=400)
+g3=ctk.CTkFrame(row2,width=600,height=400)
 g3.pack(fill='both',padx=10,pady=10,side='left')
 g3.pack_propagate(False)
 
@@ -135,4 +136,33 @@ canvas3=FigureCanvasTkAgg(fig3,master=g3)
 canvas3.draw()
 canvas3.get_tk_widget().pack(fill='both',expand=True,side='left')
 
+selectedrow = None
+def rowclick(cell):
+    global selectedrow
+    selectedrow=cell['row']
+    print('Selected Row:',selectedrow)
+    print(cell)
+
+def deleterow():
+    global selectedrow
+    if selectedrow!=0 and selectedrow!=None:
+        table.delete_row(selectedrow)
+
+def editrow():
+    global selectedrow
+    if selectedrow!=0 and selectedrow!=None:
+        table.insert(selectedrow,3,'₹999')
+
+tab1=[['Sl. No.','Date','Description','Amount','Category','Type','Mode'],[1,'07/05/2025','Auto wala bhaiyya','₹50','Travel','Expense','UPI'],[2,'07/05/2025','Lunch at cafe','₹220','Food','Expense','Card'],[3,'08/05/2025','Monthly pocket money','₹3000','Income','Income','Bank'],[4,'08/05/2025','Movie tickets','₹450','Entertainment','Expense','UPI'],[5,'09/05/2025','Bought notebooks','₹180','Education','Expense','Cash'],[6,'09/05/2025','Freelance logo payment','₹1200','Income','Income','Bank']]
+
+table=CTkTable(scroll,command=rowclick,values=tab1,header_color='#009DAF',hover_color='#00616C',corner_radius=2,text_color='white',colors=['#2B2B2B','#242424'],width=700,height=50,font=('Calibri',18))
+table.pack(fill='both',padx=10,pady=10)
+
+btnframe=ctk.CTkFrame(scroll, fg_color='transparent')
+btnframe.pack(pady=10,side='left')
+
+editbtn=ctk.CTkButton(btnframe,text='Edit',command=editrow)
+editbtn.pack(side='left', padx=10)
+deletebtn=ctk.CTkButton(btnframe,text='Delete',command=deleterow)
+deletebtn.pack(side='left', padx=10)
 win.mainloop()
