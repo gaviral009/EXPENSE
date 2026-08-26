@@ -37,8 +37,8 @@ def inr(n):
         grp.reverse()
         res = ",".join(grp) + "," + l3
     if n < 0:
-        return "-â‚¹" + res
-    return "â‚¹" + res
+        return "-Rs. " + res
+    return "Rs. " + res
 
 
 def pcl(v):
@@ -141,7 +141,7 @@ def cht(tv=0, ti=0):
         gy = pt + (ch / ng) * i
         rv = mxd - (rng / ng) * i
         cvs.create_line(pl, gy, w - pr, gy, fill="#1e2d3d", width=1)
-        tck = ("â‚¹" + str(int(rv // 1000)) + "k") if rv >= 100_000 else ("â‚¹" + str(int(rv)))
+        tck = ("Rs. " + str(int(rv // 1000)) + "k") if rv >= 100_000 else ("Rs. " + str(int(rv)))
         cvs.create_text(pl - 4, gy, text=tck, anchor="e", fill=mut, font=("Segoe UI", 8))
 
     cds = []
@@ -183,7 +183,7 @@ def grd():
         w.destroy()
 
     if len(lst) == 0:
-        el = ctk.CTkLabel(hfr, text="No holdings yet  Â·  click + New Investment", font=("Segoe UI", 11), text_color=mut)
+        el = ctk.CTkLabel(hfr, text="No holdings yet  |  click + New Investment", font=("Segoe UI", 11), text_color=mut)
         el.grid(row=0, column=0, columnspan=3, pady=30)
         return
 
@@ -261,7 +261,7 @@ def add():
     ctp.grid(row=1, column=0, sticky="ew", padx=(0, 6))
 
     ctk.CTkLabel(r2, text="Subtitle", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=1, sticky="w")
-    esb = ctk.CTkEntry(r2, placeholder_text="45 shares Â· Equity", fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
+    esb = ctk.CTkEntry(r2, placeholder_text="45 shares | Equity", fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
     esb.grid(row=1, column=1, sticky="ew", padx=(6, 0))
 
     r3 = ctk.CTkFrame(win, fg_color="transparent")
@@ -269,11 +269,11 @@ def add():
     r3.columnconfigure(0, weight=1)
     r3.columnconfigure(1, weight=1)
 
-    ctk.CTkLabel(r3, text="Invested (â‚¹)", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=0, sticky="w")
+    ctk.CTkLabel(r3, text="Invested (Rs.)", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=0, sticky="w")
     ein = ctk.CTkEntry(r3, placeholder_text="100000", fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
     ein.grid(row=1, column=0, sticky="ew", padx=(0, 6))
 
-    ctk.CTkLabel(r3, text="Current Value (â‚¹)", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=1, sticky="w")
+    ctk.CTkLabel(r3, text="Current Value (Rs.)", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=1, sticky="w")
     eva = ctk.CTkEntry(r3, placeholder_text="128450", fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
     eva.grid(row=1, column=1, sticky="ew", padx=(6, 0))
 
@@ -440,7 +440,7 @@ ctl.pack(side="left")
 
 ctk.CTkLabel(ctl, text="TOTAL PORTFOLIO VALUE", font=("Segoe UI", 10), text_color=mut).pack(anchor="w")
 
-vlb = ctk.CTkLabel(ctl, text="â‚¹0", font=("Segoe UI", 32, "bold"), text_color=txt)
+vlb = ctk.CTkLabel(ctl, text="Rs. 0", font=("Segoe UI", 32, "bold"), text_color=txt)
 vlb.pack(anchor="w")
 
 ylb = ctk.CTkLabel(ctp, text="+0% YTD", font=("Segoe UI", 11), text_color=acc)
@@ -453,7 +453,7 @@ ldc = tk.Canvas(lrw, width=10, height=10, bg=crd, highlightthickness=0)
 ldc.create_oval(1, 1, 9, 9, fill=acc, outline="")
 ldc.pack(side="left", pady=3)
 
-ctk.CTkLabel(lrw, text="  LIVE  Â·  ", font=("Segoe UI", 11), text_color=txt).pack(side="left")
+ctk.CTkLabel(lrw, text="  LIVE  |  ", font=("Segoe UI", 11), text_color=txt).pack(side="left")
 
 clb = ctk.CTkLabel(lrw, text="+0% today", font=("Segoe UI", 11), text_color=acc)
 clb.pack(side="left")
@@ -476,7 +476,7 @@ icd.pack(fill="x", pady=(0, 10))
 
 ctk.CTkLabel(icd, text="INVESTED CAPITAL", font=("Segoe UI", 10), text_color=mut).pack(anchor="w", padx=18, pady=(16, 4))
 
-ilb = ctk.CTkLabel(icd, text="â‚¹0", font=("Segoe UI", 26, "bold"), text_color=txt)
+ilb = ctk.CTkLabel(icd, text="Rs. 0", font=("Segoe UI", 26, "bold"), text_color=txt)
 ilb.pack(anchor="w", padx=18)
 
 bcv = tk.Canvas(icd, height=6, bg=crd, highlightthickness=0)
@@ -488,7 +488,7 @@ tcd.pack(fill="x", pady=(0, 10))
 
 ctk.CTkLabel(tcd, text="TODAY'S RETURN", font=("Segoe UI", 10), text_color=mut).pack(anchor="w", padx=18, pady=(16, 4))
 
-rlb = ctk.CTkLabel(tcd, text="â‚¹0", font=("Segoe UI", 24, "bold"), text_color=acc)
+rlb = ctk.CTkLabel(tcd, text="Rs. 0", font=("Segoe UI", 24, "bold"), text_color=acc)
 rlb.pack(anchor="w", padx=18)
 
 plb = ctk.CTkLabel(tcd, text="+0%", font=("Segoe UI", 12), text_color=grn)
@@ -497,7 +497,7 @@ plb.pack(anchor="w", padx=18, pady=(0, 16))
 ncd = ctk.CTkFrame(rgt, fg_color=crd, corner_radius=14, border_width=1, border_color=brd)
 ncd.pack(fill="both", expand=True)
 
-ctk.CTkLabel(ncd, text="PORTFOLIO INSIGHTS", font=("Segoe UI", 10, "bold"), text_color=acc).pack(anchor="w", padx=18, pady=(16, 6))
+ctk.CTkLabel(ncd, text="PORTFOLIO INSIGHTS", font=("Segoe UI", 10), text_color=acc).pack(anchor="w", padx=18, pady=(16, 6))
 
 nlb = ctk.CTkLabel(
     ncd,
@@ -511,7 +511,7 @@ nlb.pack(anchor="w", padx=18, pady=(0, 12))
 
 nbt = ctk.CTkButton(
     ncd,
-    text="View Full Breakdown â†’",
+    text="View Full Breakdown ->",
     fg_color=crd,
     border_width=1,
     border_color=brd,
