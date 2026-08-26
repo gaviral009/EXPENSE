@@ -1,4 +1,4 @@
-mport customtkinter as ctk
+import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
@@ -528,5 +528,3 @@ ref()
 if __name__ == "__main__":
     app.mainloop()
 
-   
-  
