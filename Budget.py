@@ -3,18 +3,16 @@ import sqlite3
 import threading
 from decimal import Decimal, InvalidOperation
 from tkinter import messagebox
-
 import customtkinter as ctk
-from PIL import Image
 
 
 DATABASE_FILE = "expense_tracker.db"
 
 COLORS = {
-    "bg": "#0f172a",
-    "panel": "#111827",
-    "card": "#1f2937",
-    "input": "#0b1220",
+    "bg": "#242424",
+    "panel": "#242424",
+    "card": "#242424",
+    "input": "#242424",
     "border": "#334155",
     "text": "#f8fafc",
     "muted": "#94a3b8",
@@ -26,147 +24,6 @@ COLORS = {
     "yellow": "#facc15",
 }
 
-
-def sideb(parent):
-    icon1 = ctk.CTkImage(dark_image=Image.open("icon1.png"))
-    icon2 = ctk.CTkImage(dark_image=Image.open("icon2.png"))
-    icon3 = ctk.CTkImage(dark_image=Image.open("icon3.png"))
-    icon4 = ctk.CTkImage(dark_image=Image.open("icon4.png"))
-    icon5 = ctk.CTkImage(dark_image=Image.open("icon5.png"))
-    logo = ctk.CTkImage(
-        dark_image=Image.open("final logo.png"),
-        size=(222, 87),
-    )
-
-    sidebar = ctk.CTkFrame(parent, width=250, fg_color="#202020")
-    sidebar.grid(row=0, column=0, sticky="nsw")
-    sidebar.grid_propagate(False)
-
-    visible = False
-
-    def showextra():
-        nonlocal visible
-
-        if not visible:
-            bt4_1.grid(row=5, column=0, sticky="w")
-            bt4_2.grid(row=6, column=0, sticky="w")
-            bt5.grid(row=7, column=0)
-            bt4.configure(text="Budget                        ▼")
-            visible = True
-        else:
-            bt4_1.grid_forget()
-            bt4_2.grid_forget()
-            bt5.grid(row=5, column=0)
-            bt4.configure(text="Budget                        ▶")
-            visible = False
-
-    ctk.CTkLabel(
-        sidebar,
-        fg_color="#202020",
-        width=250,
-        height=200,
-        text="",
-        image=logo,
-    ).grid(row=0, column=0)
-
-    bt1 = ctk.CTkButton(
-        sidebar,
-        width=250,
-        height=50,
-        fg_color="#202020",
-        hover_color="#00A998",
-        text="Income/Expense",
-        text_color="white",
-        font=("Calibri", 20),
-        anchor="w",
-        image=icon1,
-    )
-    bt2 = ctk.CTkButton(
-        sidebar,
-        width=250,
-        height=50,
-        fg_color="#202020",
-        hover_color="#00A998",
-        text="Investments",
-        text_color="white",
-        font=("Calibri", 20),
-        anchor="w",
-        image=icon4,
-    )
-    bt3 = ctk.CTkButton(
-        sidebar,
-        width=250,
-        height=50,
-        fg_color="#202020",
-        hover_color="#00A998",
-        text="Balance Management",
-        text_color="white",
-        font=("Calibri", 20),
-        anchor="w",
-        image=icon3,
-    )
-    bt4 = ctk.CTkButton(
-        sidebar,
-        width=250,
-        height=50,
-        fg_color="#202020",
-        hover_color="#00A998",
-        text="Budget                        ▶",
-        text_color="white",
-        font=("Calibri", 20),
-        anchor="w",
-        image=icon5,
-        command=showextra,
-    )
-    bt5 = ctk.CTkButton(
-        sidebar,
-        width=250,
-        height=50,
-        fg_color="#202020",
-        hover_color="#00A998",
-        text="Analytics",
-        text_color="white",
-        font=("Calibri", 20),
-        anchor="w",
-        image=icon2,
-    )
-    bt4_1 = ctk.CTkButton(
-        sidebar,
-        width=250,
-        height=50,
-        fg_color="#444444",
-        hover_color="#00A998",
-        text="   Monthly",
-        text_color="white",
-        anchor="w",
-        font=("Calibri", 16),
-    )
-    bt4_2 = ctk.CTkButton(
-        sidebar,
-        width=250,
-        height=50,
-        fg_color="#444444",
-        hover_color="#00A998",
-        text="   Long Term",
-        text_color="white",
-        anchor="w",
-        font=("Calibri", 16),
-    )
-
-    for row, button in enumerate((bt1, bt2, bt3, bt4, bt5), start=1):
-        button.grid(row=row, column=0)
-
-    def onclick(event):
-        event.widget.configure(text_color="black", fg_color="#00A998")
-
-    def onleave(event):
-        event.widget.configure(text_color="white", fg_color="#202020")
-
-    for button in (bt1, bt2, bt3, bt4, bt5):
-        button.bind("<Enter>", onclick)
-        button.bind("<Leave>", onleave)
-
-    return sidebar
 
 
 def get_db_connection():
@@ -191,10 +48,7 @@ def create_balance_table():
         cursor.execute(query)
         connection.commit()
     except sqlite3.Error as err:
-        messagebox.showerror(
-            "Database Error",
-            f"Could not create balance table:\n{err}",
-        )
+        messagebox.showerror("Database Error", f"Could not create balance table:\n{err}")
     finally:
         if "connection" in locals():
             connection.close()
@@ -243,10 +97,7 @@ def fetch_balance_records(username):
         cursor.execute(query, (username,))
         return cursor.fetchall()
     except sqlite3.Error as err:
-        messagebox.showerror(
-            "Database Error",
-            f"Could not fetch records:\n{err}",
-        )
+        messagebox.showerror("Database Error", f"Could not fetch records:\n{err}")
         return []
     finally:
         if "connection" in locals():
@@ -275,10 +126,8 @@ def delete_balance_record(record_id, username):
 def fetch_balance_totals(username):
     query = """
         SELECT
-            COALESCE(SUM(CASE WHEN type = 'You owe' THEN amount ELSE 0 END), 0)
-                AS total_you_owe,
-            COALESCE(SUM(CASE WHEN type = 'You are owed' THEN amount ELSE 0 END), 0)
-                AS total_you_are_owed
+            COALESCE(SUM(CASE WHEN type = 'You owe' THEN amount ELSE 0 END), 0) AS total_you_owe,
+            COALESCE(SUM(CASE WHEN type = 'You are owed' THEN amount ELSE 0 END), 0) AS total_you_are_owed
         FROM balance
         WHERE username = ?
     """
@@ -296,10 +145,7 @@ def fetch_balance_totals(username):
 
         return total_you_owe, total_you_are_owed, net_balance
     except sqlite3.Error as err:
-        messagebox.showerror(
-            "Database Error",
-            f"Could not calculate totals:\n{err}",
-        )
+        messagebox.showerror("Database Error", f"Could not calculate totals:\n{err}")
         return Decimal("0.00"), Decimal("0.00"), Decimal("0.00")
     finally:
         if "connection" in locals():
@@ -332,11 +178,7 @@ class BalanceManagementFrame(ctk.CTkFrame):
         )
 
         for column in range(3):
-            self.summary_frame.grid_columnconfigure(
-                column,
-                weight=1,
-                uniform="summary",
-            )
+            self.summary_frame.grid_columnconfigure(column, weight=1, uniform="summary")
 
         _, self.total_owe_value = self.create_summary_card(
             self.summary_frame, 0, "Total You Owe", COLORS["red"]
@@ -355,13 +197,7 @@ class BalanceManagementFrame(ctk.CTkFrame):
             border_width=1,
             border_color=COLORS["border"],
         )
-        self.form_frame.grid(
-            row=1,
-            column=0,
-            padx=(24, 12),
-            pady=(10, 24),
-            sticky="nsew",
-        )
+        self.form_frame.grid(row=1, column=0, padx=(24, 12), pady=(10, 24), sticky="nsew")
         self.form_frame.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
@@ -425,13 +261,7 @@ class BalanceManagementFrame(ctk.CTkFrame):
             border_width=1,
             border_color=COLORS["border"],
         )
-        self.records_container.grid(
-            row=1,
-            column=1,
-            padx=(12, 24),
-            pady=(10, 24),
-            sticky="nsew",
-        )
+        self.records_container.grid(row=1, column=1, padx=(12, 24), pady=(10, 24), sticky="nsew")
         self.records_container.grid_columnconfigure(0, weight=1)
         self.records_container.grid_rowconfigure(1, weight=1)
 
@@ -448,13 +278,7 @@ class BalanceManagementFrame(ctk.CTkFrame):
             scrollbar_button_color=COLORS["border"],
             scrollbar_button_hover_color=COLORS["blue"],
         )
-        self.records_frame.grid(
-            row=1,
-            column=0,
-            padx=18,
-            pady=(0, 18),
-            sticky="nsew",
-        )
+        self.records_frame.grid(row=1, column=0, padx=18, pady=(0, 18), sticky="nsew")
         self.records_frame.grid_columnconfigure(0, weight=1)
 
     def create_entry(self, placeholder):
@@ -512,10 +336,7 @@ class BalanceManagementFrame(ctk.CTkFrame):
             if amount <= 0:
                 raise InvalidOperation
         except (InvalidOperation, ValueError):
-            messagebox.showwarning(
-                "Validation Error",
-                "Amount must be a positive number.",
-            )
+            messagebox.showwarning("Validation Error", "Amount must be a positive number.")
             return None
 
         if not description:
@@ -525,16 +346,14 @@ class BalanceManagementFrame(ctk.CTkFrame):
         try:
             record_date = dt.datetime.strptime(date_text, "%Y-%m-%d").date()
         except ValueError:
-            messagebox.showwarning(
-                "Validation Error",
-                "Date must be in YYYY-MM-DD format.",
-            )
+            messagebox.showwarning("Validation Error", "Date must be in YYYY-MM-DD format.")
             return None
 
         return amount, description, record_type, record_date
 
     def add_record(self):
         cleaned_values = self.validate_inputs()
+
         if cleaned_values is None:
             return
 
@@ -563,10 +382,7 @@ class BalanceManagementFrame(ctk.CTkFrame):
             self.load_records()
             messagebox.showinfo("Success", "Balance record added successfully.")
         elif error:
-            messagebox.showerror(
-                "Database Error",
-                f"Could not add record:\n{error}",
-            )
+            messagebox.showerror("Database Error", f"Could not add record:\n{error}")
 
     def clear_inputs(self):
         self.amount_entry.delete(0, "end")
@@ -635,14 +451,7 @@ class BalanceManagementFrame(ctk.CTkFrame):
             anchor="w",
             justify="left",
             wraplength=420,
-        ).grid(
-            row=1,
-            column=0,
-            columnspan=2,
-            padx=18,
-            pady=(2, 6),
-            sticky="ew",
-        )
+        ).grid(row=1, column=0, columnspan=2, padx=18, pady=(2, 6), sticky="ew")
 
         ctk.CTkLabel(
             card,
@@ -669,6 +478,7 @@ class BalanceManagementFrame(ctk.CTkFrame):
             "Delete Record",
             "Are you sure you want to delete this balance record?",
         )
+
         if not confirm:
             return
 
@@ -683,15 +493,11 @@ class BalanceManagementFrame(ctk.CTkFrame):
             self.load_records()
             messagebox.showinfo("Deleted", "Balance record deleted successfully.")
         elif error:
-            messagebox.showerror(
-                "Database Error",
-                f"Could not delete record:\n{error}",
-            )
+            messagebox.showerror("Database Error", f"Could not delete record:\n{error}")
 
     def update_totals(self):
-        total_you_owe, total_you_are_owed, net_balance = fetch_balance_totals(
-            self.username
-        )
+        total_you_owe, total_you_are_owed, net_balance = fetch_balance_totals(self.username)
+
         self.total_owe_value.configure(text=f"{total_you_owe:.2f}")
         self.total_owed_value.configure(text=f"{total_you_are_owed:.2f}")
         self.net_balance_value.configure(text=f"{net_balance:.2f}")
@@ -703,20 +509,13 @@ if __name__ == "__main__":
 
     app = ctk.CTk()
     app.title("Expense Tracker - Balance Management")
-    app.geometry("1100x650")
+    app.geometry("1524x784+0+0")
     app.minsize(900, 560)
 
     logged_in_username = "demo_user"
 
-    app.grid_rowconfigure(0, weight=1)
-    app.grid_columnconfigure(1, weight=1)
-
-    sideb(app)
-
-    content = ctk.CTkFrame(app, fg_color=COLORS["bg"])
-    content.grid(row=0, column=1, sticky="nsew")
-
-    frame = BalanceManagementFrame(content, logged_in_username)
+    frame = BalanceManagementFrame(app, logged_in_username)
     frame.pack(fill="both", expand=True)
 
     app.mainloop()
+
