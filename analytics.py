@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from sidebar import sideb
+#from sidebar import sideb
 import matplotlib.pyplot as map
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from CTkTable import CTkTable
@@ -15,10 +15,10 @@ win.grid_rowconfigure(0, weight=1)
 fra=ctk.CTkFrame(win)
 fra.grid(row=0,column=0,sticky='nsew')
 #fra.grid_columnconfigure(0,weight=0)
-fra.grid_columnconfigure(1,weight=1)
+fra.grid_columnconfigure(0,weight=1)
 fra.grid_rowconfigure(0,weight=1)
 
-sideb(fra)
+#sideb(fra)
 
 maindict={200:'Mon',450:'Tue',300:'Wed',500:'Thu',700:'Fri',400:'Sat',350:'Sun'}
 
@@ -26,9 +26,9 @@ days=list(maindict.values())
 spend=list(maindict.keys())
 
 an=ctk.CTkFrame(fra,width=1274,height=784)
-an.grid(row=0,column=1,sticky='nsew')
+an.grid(row=0,column=0,sticky='nsew')
 
-Ana=ctk.CTkLabel(an,text='Analytics',text_color='white',font=('Algerian',50))
+Ana=ctk.CTkLabel(an,text='Analytics',text_color='white',font=('Arial',50))
 Ana.pack(pady=(70,30),anchor='nw',padx=50)
 
 scroll=ctk.CTkScrollableFrame(an,width=1200,height=600)
