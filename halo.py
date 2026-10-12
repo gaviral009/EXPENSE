@@ -7,6 +7,7 @@ import customtkinter as ctk
 import mysql.connector
 from PIL import Image
 
+from analytics import build_analytics
 from balance_manager import BalanceManagementFrame
 from investments import build_investments
 
@@ -263,7 +264,7 @@ def _clear_root(root):
         child.destroy()
 
 
-def sideb(parent, on_home=None, on_income=None, on_investments=None, on_balance=None):
+def sideb(parent, on_home=None, on_income=None, on_investments=None, on_balance=None, on_analytics=None):
     icon1 = ctk.CTkImage(dark_image=Image.open(_asset_path("icon1.png")))
     icon2 = ctk.CTkImage(dark_image=Image.open(_asset_path("icon2.png")))
     icon3 = ctk.CTkImage(dark_image=Image.open(_asset_path("icon3.png")))
@@ -370,6 +371,7 @@ def sideb(parent, on_home=None, on_income=None, on_investments=None, on_balance=
         font=("Calibri", 20),
         anchor="w",
         image=icon2,
+        command=on_analytics,
     )
     bt4_1 = ctk.CTkButton(
         sidebar,
@@ -447,12 +449,21 @@ def build_logged_in(root, username):
         frame = BalanceManagementFrame(content, username)
         frame.grid(row=0, column=0, sticky="nsew")
 
+    def show_analytics():
+        _clear_content(content)
+        content.grid_columnconfigure(0, weight=1)
+        content.grid_rowconfigure(0, weight=1)
+        holder = ctk.CTkFrame(content, fg_color="transparent")
+        holder.grid(row=0, column=0, sticky="nsew")
+        build_analytics(holder, username)
+
     sideb(
         fra,
         on_home=show_dashboard,
         on_income=show_income,
         on_investments=show_investments,
         on_balance=show_balance,
+        on_analytics=show_analytics,
     )
     show_dashboard()
     return fra
