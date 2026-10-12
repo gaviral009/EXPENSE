@@ -135,7 +135,7 @@ ax3.spines['right'].set_color('#2B2B2B')
 canvas3=FigureCanvasTkAgg(fig3,master=g3)
 canvas3.draw()
 canvas3.get_tk_widget().pack(fill='both',expand=True,side='left')
-
+'''
 selectedrow = None
 def rowclick(cell):
     global selectedrow
@@ -165,4 +165,24 @@ editbtn=ctk.CTkButton(btnframe,text='Edit',command=editrow)
 editbtn.pack(side='left', padx=10)
 deletebtn=ctk.CTkButton(btnframe,text='Delete',command=deleterow)
 deletebtn.pack(side='left', padx=10)
+'''
+
+data = [["Sl. No.", "Date", "Description", "Amount", "Category", "Type", "Mode"],
+    ["1", "12/10/2026", "Lunch", "₹250", "Food", "Expense", "UPI"],
+    ["2", "11/10/2026", "Salary", "₹20,000", "Income", "Income", "Bank"],
+    ["3", "10/10/2026", "Movie", "₹500", "Entertainment", "Expense", "Card"]]
+his=ctk.CTkLabel(scroll,text='Transaction history:',font=('Arial',25))
+his.pack(pady=10)
+table = CTkTable(scroll,
+    row=len(data),
+    column=7,
+    values=data,
+    width=200,
+    height=40,
+    corner_radius=5,
+    header_color="#00A998",
+    hover_color="#444444",
+    font=('Arial',16))
+table.pack(pady=20)
+
 win.mainloop()

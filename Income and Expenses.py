@@ -1,5 +1,9 @@
 import customtkinter as ctk
-
+from tkinter import messagebox
+import mysql.connector as ms
+con=ms.connect(host="localhost",user="root",password="pnm1079",database="tracko")
+if con.is_connected():
+    cur=con.cursor()
 #main window opening
 wiin=ctk.CTk()
 wiin.geometry('1524x784+0+0')
@@ -49,6 +53,16 @@ incexd=ctk.CTkComboBox(row1,
     dropdown_font=("Calibri", 16))
 incexd.grid(row=1,column=1,sticky='nsew')
 #d1=incexd.get()
+
+#Amount
+rowa = ctk.CTkFrame(iebox,fg_color='#2B2B2B')
+rowa.pack(pady=(10,10),padx=50,anchor='nw')
+
+amt=ctk.CTkLabel(rowa,text='Amount:                            ',text_color='#F0EDE6',font=('Arial',25))
+amt.grid(row=1,column=0,sticky='nsew')
+
+amte=ctk.CTkEntry(rowa,placeholder_text='Enter Amount (₹)',width=250,height=40,corner_radius=8,fg_color="#202020",border_color="#555555")
+amte.grid(row=1,column=1,sticky='nsew')
 
 #Description
 row2 = ctk.CTkFrame(iebox,fg_color='#2B2B2B')
@@ -126,7 +140,7 @@ day=ctk.CTkComboBox(row5,values=[str(i) for i in range(1, 32)],width=80,height=4
     dropdown_font=("Calibri", 16))
 day.grid(row=1, column=1, padx=5)
 
-month=ctk.CTkComboBox(row5,values=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sept','Oct','Nov','Dec'],width=80,height=40,corner_radius=8,
+month=ctk.CTkComboBox(row5,values=['1','2','3','4','5','6','7','8','9','10','11','12'],width=80,height=40,corner_radius=8,
     fg_color="#202020",
     border_color="#555555",
     text_color="white",
@@ -178,6 +192,31 @@ jitd.pack(padx=10,pady=10,anchor='nw')
 jitdes=ctk.CTkLabel(row6,text='(How much Joy did this transaction give you on a scale of 1 to 5?)',text_color='#D2D2D2',font=('Arial',20))
 jitdes.pack(side='left',padx=10,pady=(10,5),anchor='w')
 
-sub=ctk.CTkButton(iebox,text='Add transaction',fg_color='#00A998',text_color='white',width=250,height=50,font=('Arial',20))
+def add_transaction():
+    amount=float(amte.get())
+    description=dese.get()
+    category=catd.get()
+    mode=modd.get()
+    day_value=int(day.get())
+    month_value=int(month.get())
+    year_value=int(year.get())
+    transaction_date="{}-{:02d}-{:02d}".format(year_value, month_value, day_value)
+    joy=int(jitd.get()[0])
+    cur.execute("select count(*) from ie")
+    count=cur.fetchone()[0]
+    slno=count+1
+
+    query = """
+    INSERT INTO ie (SlNo, amount, des, cat, mop, date, jit)
+    VALUES ({}, {}, '{}', '{}', '{}', '{}', {})
+    """.format(slno,amount,description,category,mode,transaction_date,joy)
+
+    cur.execute(query)
+    con.commit()
+    messagebox.showinfo("Success", "Transaction added successfully!")
+    print("Transaction added successfully!")
+
+sub=ctk.CTkButton(iebox,text='Add transaction',fg_color='#00A998',text_color='white',width=250,height=50,font=('Arial',20),command=add_transaction)
 sub.pack(pady=(10,10),padx=50,anchor='se')
+
 wiin.mainloop()
