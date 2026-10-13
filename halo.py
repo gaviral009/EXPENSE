@@ -1,5 +1,6 @@
 import datetime as dt
 import hashlib
+import math
 import os
 import re
 import secrets
@@ -719,6 +720,22 @@ grn = "#3fb950"
 red = "#ff6b6b"
 ibg = "#0d1117"
 
+COLORS = {
+    "bg": bg,
+    "panel": crd,
+    "card": crd,
+    "input": crd,
+    "border": brd,
+    "text": txt,
+    "muted": mut,
+    "blue": acc,
+    "blue_hover": "#00a88a",
+    "red": red,
+    "red_hover": "#e05252",
+    "green": grn,
+    "yellow": "#facc15",
+}
+
 lst = []
 his = []
 investment_username = None
@@ -1325,14 +1342,14 @@ def add():
             existing["value"] += val
             existing["color"] = pcl
             existing["letter"] = tkr[0]
-            existing["added_at"] = datetime.now()
+            existing["added_at"] = dt.datetime.now()
             update_holding_in_db(existing)
             nh = existing
         else:
             nh = {"name": nm, "ticker": tkr, "type": typ,
                   "sub": sub, "invested": inv, "value": val,
                   "color": pcl, "letter": tkr[0],
-                  "added_at": datetime.now()}
+                  "added_at": dt.datetime.now()}
             lst.append(nh)
             save_holding_to_db(nh)
 
@@ -2789,5 +2806,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 
