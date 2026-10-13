@@ -54,6 +54,36 @@ def init_database():
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS holdings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                ticker VARCHAR(50) NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                sub VARCHAR(255) NOT NULL,
+                invested DOUBLE NOT NULL,
+                value DOUBLE NOT NULL,
+                color VARCHAR(20) NOT NULL,
+                letter VARCHAR(10) NOT NULL,
+                created_at DATETIME NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS portfolio_history (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                recorded_at DATETIME NOT NULL,
+                total_value DOUBLE NOT NULL,
+                total_invested DOUBLE NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """
+        )
         connection.commit()
         cursor.close()
         connection.close()

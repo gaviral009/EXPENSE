@@ -44,7 +44,7 @@ def init_database():
     try:
         connection = get_connection(include_database=False)
         cursor = connection.cursor()
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']}")
+        cursor.execute(f"create database if not exists {DB_CONFIG['database']}")
         cursor.close()
         connection.close()
 
@@ -96,6 +96,38 @@ def init_database():
             )
             """
         )
+        cursor.execute(
+            """
+            create table if not exists holdings (
+                id int auto_increment primary key,
+                user_id int not null,
+                name varchar(255) not null,
+                ticker varchar(50) not null,
+                type varchar(50) not null,
+                sub varchar(255) not null,
+                invested double not null,
+                value double not null,
+                color varchar(20) not null,
+                letter varchar(10) not null,
+                created_at datetime not null,
+                foreign key (user_id) references users(id)
+            )
+            """
+        )
+        cursor.execute(
+            """
+            create table if not exists portfolio_history (
+                id int auto_increment primary key,
+                user_id int not null,
+                recorded_at datetime not null,
+                total_value double not null,
+                total_invested double not null,
+                foreign key (user_id) references users(id)
+            )
+            """
+        )
+        _ensure_user_id_column(cursor, "holdings")
+        _ensure_user_id_column(cursor, "portfolio_history")
         connection.commit()
         cursor.close()
         connection.close()
@@ -103,6 +135,20 @@ def init_database():
     except Exception as e:
         print("DATABASE INIT ERROR:", e)
         return False
+
+
+def _ensure_user_id_column(cursor, table_name):
+    cursor.execute(f"show columns from {table_name}")
+    columns = {row[0] for row in cursor.fetchall()}
+    if "user_id" in columns:
+        return
+    cursor.execute(f"alter table {table_name} add column user_id int")
+    try:
+        cursor.execute(
+            f"alter table {table_name} add constraint {table_name}_user_fk foreign key (user_id) references users(id)"
+        )
+    except Exception:
+        pass
 
 
 def get_user(username):
@@ -533,7 +579,7 @@ def build_analytics(parent, username):
     def selected_record():
         index = selectedrow["index"]
         if index is None or index < 0 or index >= len(rows):
-            messagebox.showinfo("Select a row", "Click a transaction in the table first.")
+            messagebox.showinfo("select a row", "Click a transaction in the table first.")
             return None
         return rows[index]
 
@@ -675,6 +721,7 @@ ibg = "#0d1117"
 
 lst = []
 his = []
+investment_username = None
 
 app = None
 vlb = None
@@ -687,6 +734,212 @@ bcv = None
 rlb = None
 plb = None
 nlb = None
+
+
+def _as_datetime(value):
+    if isinstance(value, dt.datetime):
+        return value
+    if isinstance(value, dt.date):
+        return dt.datetime.combine(value, dt.time.min)
+    if isinstance(value, str) and value:
+        text = value[:19]
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return dt.datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+    return dt.datetime.now()
+
+
+def _investment_user():
+    user = get_user(investment_username) if investment_username else None
+    if not user:
+        messagebox.showerror("User not found", "Could not match this portfolio to a logged-in user.")
+        return None
+    return user
+
+
+def load_investments_from_db():
+    global lst, his
+    lst = []
+    his = []
+    user = get_user(investment_username) if investment_username else None
+    if not user:
+        return
+    try:
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            select id, user_id, name, ticker, type, sub, invested, value, color, letter, created_at
+            from holdings
+            where user_id = %s
+            order by id
+            """,
+            (user["id"],),
+        )
+        for row in cursor.fetchall():
+            lst.append(
+                {
+                    "id": row["id"],
+                    "user_id": row["user_id"],
+                    "name": row["name"],
+                    "ticker": row["ticker"],
+                    "type": row["type"],
+                    "sub": row["sub"],
+                    "invested": float(row["invested"] or 0),
+                    "value": float(row["value"] or 0),
+                    "color": row["color"],
+                    "letter": row["letter"],
+                    "added_at": _as_datetime(row["created_at"]),
+                }
+            )
+        cursor.execute(
+            """
+            select recorded_at, total_value, total_invested
+            from portfolio_history
+            where user_id = %s
+            order by recorded_at, id
+            """,
+            (user["id"],),
+        )
+        his = [
+            (
+                _as_datetime(row["recorded_at"]),
+                float(row["total_value"] or 0),
+                float(row["total_invested"] or 0),
+            )
+            for row in cursor.fetchall()
+        ]
+        cursor.close()
+        connection.close()
+        if lst and not his:
+            snapshot = (dt.datetime.now(), sum(h["value"] for h in lst), sum(h["invested"] for h in lst))
+            his.append(snapshot)
+            save_portfolio_snapshot(user["id"], snapshot[0], snapshot[1], snapshot[2])
+    except Exception as e:
+        print("LOAD INVESTMENTS ERROR:", e)
+        lst = []
+        his = []
+
+
+def save_portfolio_snapshot(user_id, recorded_at, total_value, total_invested):
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            insert into portfolio_history (user_id, recorded_at, total_value, total_invested)
+            values (%s, %s, %s, %s)
+            """,
+            (user_id, recorded_at, total_value, total_invested),
+        )
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+    except Exception as e:
+        print("SAVE PORTFOLIO HISTORY ERROR:", e)
+        return False
+
+
+def save_holding_to_db(holding):
+    user = _investment_user()
+    if not user:
+        return False
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            insert into holdings
+                (user_id, name, ticker, type, sub, invested, value, color, letter, created_at)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                user["id"],
+                holding["name"],
+                holding["ticker"],
+                holding["type"],
+                holding["sub"],
+                holding["invested"],
+                holding["value"],
+                holding["color"],
+                holding["letter"],
+                holding["added_at"],
+            ),
+        )
+        holding["id"] = cursor.lastrowid
+        holding["user_id"] = user["id"]
+        total_value = sum(item["value"] for item in lst)
+        total_invested = sum(item["invested"] for item in lst)
+        cursor.execute(
+            """
+            insert into portfolio_history (user_id, recorded_at, total_value, total_invested)
+            values (%s, %s, %s, %s)
+            """,
+            (user["id"], holding["added_at"], total_value, total_invested),
+        )
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+    except Exception as e:
+        messagebox.showerror("Database Error", f"Could not save investment:\n{e}")
+        return False
+
+
+def update_holding_in_db(holding):
+    user = _investment_user()
+    if not user:
+        return False
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            update holdings
+            set name = %s,
+                ticker = %s,
+                type = %s,
+                sub = %s,
+                invested = %s,
+                value = %s,
+                color = %s,
+                letter = %s,
+                created_at = %s
+            where id = %s and user_id = %s
+            """,
+            (
+                holding["name"],
+                holding["ticker"],
+                holding["type"],
+                holding["sub"],
+                holding["invested"],
+                holding["value"],
+                holding["color"],
+                holding["letter"],
+                holding["added_at"],
+                holding["id"],
+                user["id"],
+            ),
+        )
+        total_value = sum(item["value"] for item in lst)
+        total_invested = sum(item["invested"] for item in lst)
+        cursor.execute(
+            """
+            insert into portfolio_history (user_id, recorded_at, total_value, total_invested)
+            values (%s, %s, %s, %s)
+            """,
+            (user["id"], holding["added_at"], total_value, total_invested),
+        )
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+    except Exception as e:
+        messagebox.showerror("Database Error", f"Could not update investment:\n{e}")
+        return False
 
 
 def inr(n):
@@ -994,22 +1247,38 @@ def add():
                 pcl_color = cva[idx]
                 break
 
-        nh = {
-            "name": nm,
-            "ticker": tkr,
-            "type": typ,
-            "sub": sub,
-            "invested": inv,
-            "value": val,
-            "color": pcl_color,
-            "letter": tkr[0],
-            "added_at": dt.datetime.now()
-        }
-        lst.append(nh)
+        existing = next((h for h in lst if h["ticker"] == tkr and h["type"] == typ), None)
+        added_at = dt.datetime.now()
+        if existing:
+            existing["name"] = nm
+            existing["sub"] = sub
+            existing["invested"] += inv
+            existing["value"] += val
+            existing["color"] = pcl_color
+            existing["letter"] = tkr[0]
+            existing["added_at"] = added_at
+            if not update_holding_in_db(existing):
+                return
+        else:
+            nh = {
+                "name": nm,
+                "ticker": tkr,
+                "type": typ,
+                "sub": sub,
+                "invested": inv,
+                "value": val,
+                "color": pcl_color,
+                "letter": tkr[0],
+                "added_at": added_at,
+            }
+            lst.append(nh)
+            if not save_holding_to_db(nh):
+                lst.pop()
+                return
 
         tv = sum(h["value"] for h in lst)
         ti = sum(h["invested"] for h in lst)
-        his.append((dt.datetime.now(), tv, ti))
+        his.append((added_at, tv, ti))
 
         win.destroy()
         ref()
@@ -1059,9 +1328,10 @@ def dbr(e=None):
     bcv.create_rectangle(0, 1, int(w * 0.7), 5, fill=acc, outline="")
 
 
-def build_investments(parent):
-    global app, vlb, ylb, clb, cvs, hfr, ilb, bcv, rlb, plb, nlb
+def build_investments(parent, username):
+    global app, vlb, ylb, clb, cvs, hfr, ilb, bcv, rlb, plb, nlb, investment_username
 
+    investment_username = username
     app = parent
     app.configure(fg_color=bg)
 
@@ -1192,6 +1462,7 @@ def build_investments(parent):
     )
     nbt.pack(fill="x", padx=18, pady=(0, 16))
 
+    load_investments_from_db()
     ref()
     return app
 
@@ -1309,8 +1580,8 @@ def delete_balance_record(record_id, username):
 def fetch_balance_totals(username):
     query = """
         select
-            coalesce(sum(case when type = 'You owe' then amount else 0 end), 0) AS total_you_owe,
-            coalesce(sum(case when type = 'You are owed' then amount else 0 end), 0) AS total_you_are_owed
+            coalesce(sum(case when type = 'You owe' then amount else 0 end), 0) as total_you_owe,
+            coalesce(sum(case when type = 'You are owed' then amount else 0 end), 0) as total_you_are_owed
         from balance
         where username = %s
     """
@@ -1904,7 +2175,7 @@ def build_logged_in(root, username):
         content.grid_rowconfigure(0, weight=1)
         holder = ctk.CTkFrame(content, fg_color="#0d1117")
         holder.grid(row=0, column=0, sticky="nsew")
-        build_investments(holder)
+        build_investments(holder, username)
 
     def show_balance():
         _clear_content(content)
@@ -2361,4 +2632,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

@@ -11,7 +11,7 @@ ctk.set_default_color_theme("dark-blue")
 bg, crd, brd, acc, txt = "#1B1B1F", "#242429", "#38383F", "#C9A96E", "#F0EDE6"
 mut, grn, red, ibg = "#9C9993", "#4EBA6F", "#E06A6A", "#161619"
 
-DB_HOST, DB_USER, DB_PASS, DB_NAME = "localhost", "root", "123456", "investments_db"
+DB_HOST, DB_USER, DB_PASS, DB_NAME = "localhost", "root", "123456", "expense_tracker"
 
 lst, his, current_chart_mode = [], [], "allocation"
 
@@ -30,12 +30,16 @@ def init_db():
         cur.execute(f"USE {DB_NAME}")
         cur.execute("""CREATE TABLE IF NOT EXISTS holdings(
                         id INT AUTO_INCREMENT PRIMARY KEY,
-                        name VARCHAR(255),ticker VARCHAR(50),type VARCHAR(50),
-                        sub VARCHAR(255),invested DOUBLE,value DOUBLE,
-                        color VARCHAR(20),letter VARCHAR(10),created_at DATETIME)""")
+                        user_id INT NOT NULL,
+                        name VARCHAR(255) NOT NULL,ticker VARCHAR(50) NOT NULL,type VARCHAR(50) NOT NULL,
+                        sub VARCHAR(255) NOT NULL,invested DOUBLE NOT NULL,value DOUBLE NOT NULL,
+                        color VARCHAR(20) NOT NULL,letter VARCHAR(10) NOT NULL,created_at DATETIME NOT NULL,
+                        FOREIGN KEY (user_id) REFERENCES users(id))""")
         cur.execute("""CREATE TABLE IF NOT EXISTS portfolio_history(
                         id INT AUTO_INCREMENT PRIMARY KEY,
-                        recorded_at DATETIME,total_value DOUBLE,total_invested DOUBLE)""")
+                        user_id INT NOT NULL,
+                        recorded_at DATETIME NOT NULL,total_value DOUBLE NOT NULL,total_invested DOUBLE NOT NULL,
+                        FOREIGN KEY (user_id) REFERENCES users(id))""")
         c.commit(); c.close()
     except Exception as e:
         print(f"DB init notice: {e}")
@@ -48,7 +52,7 @@ def load_from_db():
         cur.execute("SELECT * FROM holdings ORDER BY id")
         lst = [{k: (float(v) if k in ("invested", "value") else v)
                 for k, v in row.items()} for row in cur.fetchall()]
-        cur.execute("SELECT recorded_at,total_value,total_invested FROM portfolio_history")
+        cur.execute("SELECT recorded_at,total_value,total_invested FROM portfolio_history ORDER BY recorded_at, id")
         his = [(r["recorded_at"], float(r["total_value"]),
                 float(r["total_invested"])) for r in cur.fetchall()]
         c.close()
