@@ -52,47 +52,47 @@ def init_database():
         cursor = connection.cursor()
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(50) NOT NULL UNIQUE,
-                salt CHAR(32) NOT NULL,
-                password_hash CHAR(64) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            create table if not exists users (
+                id int auto_increment primary key,
+                username varchar(50) not null unique,
+                salt char(32) not null,
+                password_hash char(64) not null,
+                created_at timestamp default current_timestamp
             )
             """
         )
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS transactions (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                direction ENUM('Income', 'Expense') NOT NULL,
-                category VARCHAR(80) NOT NULL,
-                amount DECIMAL(12, 2) NOT NULL,
-                description VARCHAR(255),
-                transaction_date DATE NOT NULL,
-                payment_mode VARCHAR(40),
-                joy_index INT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
+            create table if not exists transactions (
+                id int auto_increment primary key,
+                user_id int not null,
+                direction enum('Income', 'Expense') not null,
+                category varchar(80) not null,
+                amount decimal(12, 2) not null,
+                description varchar(255),
+                transaction_date date not null,
+                payment_mode varchar(40),
+                joy_index int,
+                created_at timestamp default current_timestamp,
+                foreign key (user_id) references users(id)
             )
             """
         )
-        cursor.execute("SHOW COLUMNS FROM transactions")
+        cursor.execute("show columns from transactions")
         columns = {row[0] for row in cursor.fetchall()}
         if "payment_mode" not in columns:
-            cursor.execute("ALTER TABLE transactions ADD COLUMN payment_mode VARCHAR(40)")
+            cursor.execute("alter table transactions add column payment_mode varchar(40)")
         if "joy_index" not in columns:
-            cursor.execute("ALTER TABLE transactions ADD COLUMN joy_index INT")
+            cursor.execute("alter table transactions add column joy_index int")
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS balance (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(255) NOT NULL,
-                amount DECIMAL(12, 2) NOT NULL,
-                description TEXT,
-                type VARCHAR(50) NOT NULL,
-                date DATE NOT NULL
+            create table if not exists balance (
+                id int auto_increment primary key,
+                username varchar(255) not null,
+                amount decimal(12, 2) not null,
+                description text,
+                type varchar(50) not null,
+                date date not null
             )
             """
         )
@@ -110,7 +110,7 @@ def get_user(username):
         connection = get_connection()
         cursor = connection.cursor(dictionary=True)
         cursor.execute(
-            "SELECT id, username, salt, password_hash FROM users WHERE username = %s",
+            "select id, username, salt, password_hash from users where username = %s",
             (username,),
         )
         user = cursor.fetchone()
@@ -127,7 +127,7 @@ def create_user(username, salt, password_hash):
         connection = get_connection()
         cursor = connection.cursor()
         cursor.execute(
-            "INSERT INTO users (username, salt, password_hash) VALUES (%s, %s, %s)",
+            "insert into users (username, salt, password_hash) values (%s, %s, %s)",
             (username, salt, password_hash),
         )
         connection.commit()
@@ -146,12 +146,12 @@ def get_user_totals(username):
         cursor = connection.cursor()
         cursor.execute(
             """
-            SELECT
-                COALESCE(SUM(CASE WHEN t.direction = 'Income' THEN t.amount ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN t.direction = 'Expense' THEN t.amount ELSE 0 END), 0)
-            FROM transactions t
-            JOIN users u ON u.id = t.user_id
-            WHERE u.username = %s
+            select
+                coalesce(sum(case when t.direction = 'Income' then t.amount else 0 end), 0),
+                coalesce(sum(case when t.direction = 'Expense' then t.amount else 0 end), 0)
+            from transactions t
+            join users u on u.id = t.user_id
+            where u.username = %s
             """,
             (username,),
         )
@@ -202,9 +202,9 @@ def add_transaction(
         cursor = connection.cursor()
         cursor.execute(
             """
-            INSERT INTO transactions
+            insert into transactions
                 (user_id, direction, category, amount, description, transaction_date, payment_mode, joy_index)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            values (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 user["id"],
@@ -227,19 +227,19 @@ def add_transaction(
 
 def list_transactions(username):
     query = """
-            SELECT t.id, t.direction, t.category, t.amount, t.description, t.transaction_date,
+            select t.id, t.direction, t.category, t.amount, t.description, t.transaction_date,
                    t.payment_mode, t.joy_index
-            FROM transactions t
-            JOIN users u ON u.id = t.user_id
-            WHERE u.username = %s
-            ORDER BY t.transaction_date DESC, t.id DESC
+            from transactions t
+            join users u on u.id = t.user_id
+            where u.username = %s
+            order by t.transaction_date desc, t.id desc
             """
     fallback = """
-            SELECT t.id, t.direction, t.category, t.amount, t.description, t.transaction_date
-            FROM transactions t
-            JOIN users u ON u.id = t.user_id
-            WHERE u.username = %s
-            ORDER BY t.transaction_date DESC, t.id DESC
+            select t.id, t.direction, t.category, t.amount, t.description, t.transaction_date
+            from transactions t
+            join users u on u.id = t.user_id
+            where u.username = %s
+            order by t.transaction_date desc, t.id desc
             """
     try:
         connection = get_connection()
@@ -276,15 +276,15 @@ def update_transaction(
         cursor = connection.cursor()
         cursor.execute(
             """
-            UPDATE transactions
-            SET direction = %s,
+            update transactions
+            set direction = %s,
                 category = %s,
                 amount = %s,
                 description = %s,
                 transaction_date = %s,
                 payment_mode = %s,
                 joy_index = %s
-            WHERE id = %s AND user_id = %s
+            where id = %s and user_id = %s
             """,
             (
                 direction,
@@ -314,7 +314,7 @@ def delete_transaction(username, record_id):
         connection = get_connection()
         cursor = connection.cursor()
         cursor.execute(
-            "DELETE FROM transactions WHERE id = %s AND user_id = %s",
+            "delete from transactions where id = %s and user_id = %s",
             (record_id, user["id"]),
         )
         connection.commit()
@@ -1216,13 +1216,13 @@ COLORS = {
 
 def create_balance_table():
     query = """
-        CREATE TABLE IF NOT EXISTS balance (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(255) NOT NULL,
-            amount DECIMAL(12, 2) NOT NULL,
-            description TEXT,
-            type VARCHAR(50) NOT NULL,
-            date DATE NOT NULL
+        create table if not exists balance (
+            id int auto_increment primary key,
+            username varchar(255) not null,
+            amount decimal(12, 2) not null,
+            description text,
+            type varchar(50) not null,
+            date date not null
         )
     """
 
@@ -1240,8 +1240,8 @@ def create_balance_table():
 
 def insert_balance_record(username, amount, description, record_type, record_date):
     query = """
-        INSERT INTO balance (username, amount, description, type, date)
-        VALUES (%s, %s, %s, %s, %s)
+        insert into balance (username, amount, description, type, date)
+        values (%s, %s, %s, %s, %s)
     """
 
     try:
@@ -1268,10 +1268,10 @@ def insert_balance_record(username, amount, description, record_type, record_dat
 
 def fetch_balance_records(username):
     query = """
-        SELECT id, amount, description, type, date
-        FROM balance
-        WHERE username = %s
-        ORDER BY date DESC, id DESC
+        select id, amount, description, type, date
+        from balance
+        where username = %s
+        order by date desc, id desc
     """
 
     try:
@@ -1289,8 +1289,8 @@ def fetch_balance_records(username):
 
 def delete_balance_record(record_id, username):
     query = """
-        DELETE FROM balance
-        WHERE id = %s AND username = %s
+        delete from balance
+        where id = %s and username = %s
     """
 
     try:
@@ -1308,11 +1308,11 @@ def delete_balance_record(record_id, username):
 
 def fetch_balance_totals(username):
     query = """
-        SELECT
-            COALESCE(SUM(CASE WHEN type = 'You owe' THEN amount ELSE 0 END), 0) AS total_you_owe,
-            COALESCE(SUM(CASE WHEN type = 'You are owed' THEN amount ELSE 0 END), 0) AS total_you_are_owed
-        FROM balance
-        WHERE username = %s
+        select
+            coalesce(sum(case when type = 'You owe' then amount else 0 end), 0) AS total_you_owe,
+            coalesce(sum(case when type = 'You are owed' then amount else 0 end), 0) AS total_you_are_owed
+        from balance
+        where username = %s
     """
 
     try:
@@ -2361,3 +2361,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
