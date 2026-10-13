@@ -5,7 +5,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from datetime import datetime
 BG, GOLD, TEXT = "#1B1B1F", "#C9A96E", "#F0EDE6"
-DB_HOST, DB_USER, DB_PASS, DB_NAME = "localhost", "root", "YOUR_MYSQL_PASSWORD", "tracko"
+DB_HOST, DB_USER, DB_PASS, DB_NAME = "localhost", "root", "pnm1079", "tracko"
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 def connect():
