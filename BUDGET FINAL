@@ -11,21 +11,23 @@ bg, crd, brd, acc, txt = "#1B1B1F", "#242429", "#38383F", "#C9A96E", "#F0EDE6"
 mut, grn, red, ibg     = "#9C9993", "#4EBA6F", "#E06A6A", "#161619"
 COLS = ["#4E80EE", "#38A169", "#E56B6F", "#9D72FF", "#319795", "#D69E2E", "#C9A96E", "#F687B3"]
 
-DB     = dict(host="localhost", user="root", password="123456", database="expense_tracker")
+DB_TRACKO = dict(host="localhost", user="root", password="123456", database="tracko")
+DB_EXPENSES = dict(host="localhost", user="root", password="123456", database="expense_tracker")
+DB_INVESTMENTS = dict(host="localhost", user="root", password="123456", database="investments_db")
 DB_RAW = dict(host="localhost", user="root", password="123456")
-budgets, expenses = [], []
+
+budgets, expenses, holdings = [], [], []
 view_month, view_year = datetime.now().month, datetime.now().year
-
-
-def get_db():
-    return mysql.connector.connect(**DB)
 
 
 def init_db():
     c = mysql.connector.connect(**DB_RAW); cur = c.cursor()
+    cur.execute("CREATE DATABASE IF NOT EXISTS tracko")
     cur.execute("CREATE DATABASE IF NOT EXISTS expense_tracker")
+    cur.execute("CREATE DATABASE IF NOT EXISTS investments_db")
     c.commit(); c.close()
-    c = get_db(); cur = c.cursor()
+    
+    c = mysql.connector.connect(**DB_TRACKO); cur = c.cursor()
     cur.execute("""CREATE TABLE IF NOT EXISTS budget (
         id INT AUTO_INCREMENT PRIMARY KEY, category VARCHAR(100),
         period ENUM('monthly','yearly'), limit_amt DOUBLE,
@@ -34,25 +36,37 @@ def init_db():
 
 
 def load():
-    global budgets, expenses
-    c = get_db(); cur = c.cursor(dictionary=True)
+    global budgets, expenses, holdings
+    
+    c = mysql.connector.connect(**DB_TRACKO); cur = c.cursor(dictionary=True)
     cur.execute("SELECT * FROM budget ORDER BY year, month, category")
     budgets = [{k: float(v) if k == "limit_amt" else v for k, v in r.items()} for r in cur.fetchall()]
+    c.close()
+    
+    c = mysql.connector.connect(**DB_EXPENSES); cur = c.cursor(dictionary=True)
     cur.execute("""SELECT amount, category, transaction_date AS date
                    FROM transactions WHERE direction='Expense' ORDER BY transaction_date""")
     expenses = [{"amount": float(r["amount"]), "category": r["category"], "date": r["date"]} for r in cur.fetchall()]
     c.close()
+    
+    try:
+        c = mysql.connector.connect(**DB_INVESTMENTS); cur = c.cursor(dictionary=True)
+        cur.execute("SELECT * FROM holdings")
+        holdings = cur.fetchall()
+        c.close()
+    except Exception:
+        holdings = []
 
 
 def add_budget(cat, per, lim, mon, yr):
-    c = get_db(); cur = c.cursor()
+    c = mysql.connector.connect(**DB_TRACKO); cur = c.cursor()
     cur.execute("INSERT INTO budget(category,period,limit_amt,month,year,created_at) VALUES(%s,%s,%s,%s,%s,%s)",
                 (cat, per, lim, mon if per == "monthly" else None, yr, datetime.now()))
     c.commit(); c.close(); load(); refresh()
 
 
 def delete_budget(bid):
-    c = get_db(); cur = c.cursor()
+    c = mysql.connector.connect(**DB_TRACKO); cur = c.cursor()
     cur.execute("DELETE FROM budget WHERE id = %s", (bid,))
     c.commit(); c.close(); load(); refresh()
 
@@ -240,7 +254,7 @@ ctk.CTkButton(nav, text="◀ Month", command=lambda: nav_month(-1), **btn).pack(
 nav_lbl = ctk.CTkLabel(nav, text="", font=("Segoe UI", 17, "bold"), text_color=acc)
 nav_lbl.pack(side="left", expand=True)
 ctk.CTkButton(nav, text="Month ▶", command=lambda: nav_month(1),  **btn).pack(side="right", padx=2, pady=7)
-ctk.CTkButton(nav, text="Year ▶",  command=lambda: nav_year(1),   **btn).pack(side="right", padx=6, pady=7)
+ctk.CTkButton(nav, text="Year ▶",  command=lambda: nav_year(1),    **btn).pack(side="right", padx=6, pady=7)
 ctk.CTkButton(nav, text="+ Add Budget", width=130, height=34, fg_color=acc, text_color=bg,
               font=("Segoe UI", 13, "bold"), hover_color="#B89758",
               command=open_add).pack(side="right", padx=14, pady=7)
