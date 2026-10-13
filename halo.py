@@ -1,3 +1,4 @@
+import datetime as dt
 import hashlib
 import os
 import re
@@ -6,6 +7,7 @@ import secrets
 import customtkinter as ctk
 import mysql.connector
 from PIL import Image
+from tkinter import messagebox
 
 from analytics import build_analytics
 from balance_manager import BalanceManagementFrame
@@ -68,11 +70,19 @@ def init_database():
                 amount DECIMAL(12, 2) NOT NULL,
                 description VARCHAR(255),
                 transaction_date DATE NOT NULL,
+                payment_mode VARCHAR(40),
+                joy_index INT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
             """
         )
+        cursor.execute("SHOW COLUMNS FROM transactions")
+        columns = {row[0] for row in cursor.fetchall()}
+        if "payment_mode" not in columns:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN payment_mode VARCHAR(40)")
+        if "joy_index" not in columns:
+            cursor.execute("ALTER TABLE transactions ADD COLUMN joy_index INT")
         connection.commit()
         cursor.close()
         connection.close()
@@ -161,7 +171,16 @@ CATEGORIES = [
 ]
 
 
-def add_transaction(username, direction, category, amount, description, transaction_date):
+def add_transaction(
+    username,
+    direction,
+    category,
+    amount,
+    description,
+    transaction_date,
+    payment_mode=None,
+    joy_index=None,
+):
     user = get_user(username)
     if not user:
         return False, "User not found."
@@ -171,10 +190,19 @@ def add_transaction(username, direction, category, amount, description, transact
         cursor.execute(
             """
             INSERT INTO transactions
-                (user_id, direction, category, amount, description, transaction_date)
-            VALUES (%s, %s, %s, %s, %s, %s)
+                (user_id, direction, category, amount, description, transaction_date, payment_mode, joy_index)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (user["id"], direction, category, float(amount), description, transaction_date),
+            (
+                user["id"],
+                direction,
+                category,
+                float(amount),
+                description,
+                transaction_date,
+                payment_mode,
+                joy_index,
+            ),
         )
         connection.commit()
         cursor.close()
@@ -185,19 +213,28 @@ def add_transaction(username, direction, category, amount, description, transact
 
 
 def list_transactions(username):
-    try:
-        connection = get_connection()
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute(
+    query = """
+            SELECT t.id, t.direction, t.category, t.amount, t.description, t.transaction_date,
+                   t.payment_mode, t.joy_index
+            FROM transactions t
+            JOIN users u ON u.id = t.user_id
+            WHERE u.username = %s
+            ORDER BY t.transaction_date DESC, t.id DESC
             """
+    fallback = """
             SELECT t.id, t.direction, t.category, t.amount, t.description, t.transaction_date
             FROM transactions t
             JOIN users u ON u.id = t.user_id
             WHERE u.username = %s
             ORDER BY t.transaction_date DESC, t.id DESC
-            """,
-            (username,),
-        )
+            """
+    try:
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+        try:
+            cursor.execute(query, (username,))
+        except Exception:
+            cursor.execute(fallback, (username,))
         rows = cursor.fetchall()
         cursor.close()
         connection.close()
@@ -205,6 +242,55 @@ def list_transactions(username):
     except Exception as e:
         print("LIST TRANSACTIONS ERROR:", e)
         return []
+
+
+def update_transaction(
+    username,
+    record_id,
+    direction,
+    category,
+    amount,
+    description,
+    transaction_date,
+    payment_mode=None,
+    joy_index=None,
+):
+    user = get_user(username)
+    if not user:
+        return False, "User not found."
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            UPDATE transactions
+            SET direction = %s,
+                category = %s,
+                amount = %s,
+                description = %s,
+                transaction_date = %s,
+                payment_mode = %s,
+                joy_index = %s
+            WHERE id = %s AND user_id = %s
+            """,
+            (
+                direction,
+                category,
+                float(amount),
+                description,
+                transaction_date,
+                payment_mode,
+                joy_index,
+                record_id,
+                user["id"],
+            ),
+        )
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
 
 def delete_transaction(username, record_id):
@@ -544,9 +630,189 @@ def build_dashboard(parent, username, on_income=None):
 def build_income_expense(parent, username):
     parent.grid_columnconfigure(0, weight=1)
     parent.grid_rowconfigure(0, weight=1)
-    page = ctk.CTkFrame(parent, fg_color="#1a1a1a")
-    page.grid(row=0, column=0, sticky="nsew")
-    return page
+
+    ie = ctk.CTkFrame(parent, fg_color="#1B1B1F")
+    ie.grid(row=0, column=0, sticky="nsew")
+    ie.grid_columnconfigure(0, weight=1)
+    ie.grid_rowconfigure(1, weight=1)
+
+    InE = ctk.CTkLabel(ie, text="Income and Expenses", text_color="#F0EDE6", font=("Arial", 50))
+    InE.grid(row=0, column=0, sticky="nw", pady=(50, 20), padx=50)
+
+    iebox = ctk.CTkScrollableFrame(ie, fg_color="#2B2B2B")
+    iebox.grid(row=1, column=0, sticky="nsew", pady=(20, 20), padx=50)
+
+    combo_style = dict(
+        width=250,
+        height=40,
+        corner_radius=8,
+        fg_color="#202020",
+        border_color="#555555",
+        text_color="white",
+        font=("Calibri", 16),
+        button_color="#00A998",
+        button_hover_color="#008F82",
+        dropdown_fg_color="#202020",
+        dropdown_text_color="white",
+        dropdown_hover_color="#00A998",
+        dropdown_font=("Calibri", 16),
+    )
+
+    row1 = ctk.CTkFrame(iebox, fg_color="#2B2B2B")
+    row1.pack(pady=(10, 10), padx=50, anchor="nw", fill="x")
+    ctk.CTkLabel(row1, text="Income/Expense:               ", text_color="#F0EDE6", font=("Arial", 25)).grid(
+        row=1, column=0, sticky="nsew"
+    )
+    incexd = ctk.CTkComboBox(row1, values=["Income", "Expense"], **combo_style)
+    incexd.grid(row=1, column=1, sticky="nsew")
+
+    rowa = ctk.CTkFrame(iebox, fg_color="#2B2B2B")
+    rowa.pack(pady=(10, 10), padx=50, anchor="nw", fill="x")
+    ctk.CTkLabel(rowa, text="Amount:                            ", text_color="#F0EDE6", font=("Arial", 25)).grid(
+        row=1, column=0, sticky="nsew"
+    )
+    amte = ctk.CTkEntry(
+        rowa,
+        placeholder_text="Enter Amount (₹)",
+        width=250,
+        height=40,
+        corner_radius=8,
+        fg_color="#202020",
+        border_color="#555555",
+    )
+    amte.grid(row=1, column=1, sticky="nsew")
+
+    row2 = ctk.CTkFrame(iebox, fg_color="#2B2B2B")
+    row2.pack(pady=(10, 10), padx=50, anchor="nw", fill="x")
+    ctk.CTkLabel(row2, text="Description:                       ", text_color="#F0EDE6", font=("Arial", 25)).grid(
+        row=1, column=0, sticky="nsew"
+    )
+    dese = ctk.CTkEntry(
+        row2,
+        placeholder_text="Enter Description",
+        width=250,
+        height=40,
+        corner_radius=8,
+        fg_color="#202020",
+        border_color="#555555",
+    )
+    dese.grid(row=1, column=1, sticky="nsew")
+
+    row3 = ctk.CTkFrame(iebox, fg_color="#2B2B2B")
+    row3.pack(pady=(10, 10), padx=50, anchor="nw", fill="x")
+    ctk.CTkLabel(row3, text="Category:                           ", text_color="#F0EDE6", font=("Arial", 25)).grid(
+        row=1, column=0, sticky="nsew"
+    )
+    catd = ctk.CTkComboBox(
+        row3,
+        values=[
+            "Essentials",
+            "Food",
+            "Healthcare",
+            "Travel",
+            "Shopping",
+            "Subscriptions",
+            "Education",
+            "Loans",
+            "Housing",
+            "Miscellaneous",
+        ],
+        **combo_style,
+    )
+    catd.grid(row=1, column=1, sticky="nsew")
+
+    row4 = ctk.CTkFrame(iebox, fg_color="#2B2B2B")
+    row4.pack(pady=(10, 10), padx=50, anchor="nw", fill="x")
+    ctk.CTkLabel(row4, text="Mode of Payment:              ", text_color="#F0EDE6", font=("Arial", 25)).grid(
+        row=1, column=0, sticky="nsew"
+    )
+    modd = ctk.CTkComboBox(
+        row4,
+        values=["UPI", "Cash", "Debit Card", "Credit Card", "Net Banking", "Cheque", "EMI"],
+        **combo_style,
+    )
+    modd.grid(row=1, column=1, sticky="nsew")
+
+    row5 = ctk.CTkFrame(iebox, fg_color="#2B2B2B")
+    row5.pack(pady=(10, 10), padx=50, anchor="nw", fill="x")
+    ctk.CTkLabel(row5, text="Date:(Date/Month/Year)     ", text_color="#F0EDE6", font=("Arial", 25)).grid(
+        row=1, column=0, sticky="nsew"
+    )
+    day = ctk.CTkComboBox(row5, values=[str(i) for i in range(1, 32)], width=80, height=40, corner_radius=8, fg_color="#202020", border_color="#555555", text_color="white", font=("Calibri", 16), button_color="#00A998", button_hover_color="#008F82", dropdown_fg_color="#202020", dropdown_text_color="white", dropdown_hover_color="#00A998", dropdown_font=("Calibri", 16))
+    day.grid(row=1, column=1, padx=5)
+    month = ctk.CTkComboBox(row5, values=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"], width=80, height=40, corner_radius=8, fg_color="#202020", border_color="#555555", text_color="white", font=("Calibri", 16), button_color="#00A998", button_hover_color="#008F82", dropdown_fg_color="#202020", dropdown_text_color="white", dropdown_hover_color="#00A998", dropdown_font=("Calibri", 16))
+    month.grid(row=1, column=2, padx=5)
+    year = ctk.CTkComboBox(row5, values=[str(i) for i in range(2025, 2031)], width=110, height=40, corner_radius=8, fg_color="#202020", border_color="#555555", text_color="white", font=("Calibri", 16), button_color="#00A998", button_hover_color="#008F82", dropdown_fg_color="#202020", dropdown_text_color="white", dropdown_hover_color="#00A998", dropdown_font=("Calibri", 16))
+    year.grid(row=1, column=3, padx=5)
+    today = dt.date.today()
+    day.set(str(today.day))
+    month.set(str(today.month))
+    year.set(str(today.year))
+
+    row6 = ctk.CTkFrame(iebox, fg_color="#2B2B2B")
+    row6.pack(pady=(10, 10), padx=50, anchor="nw", fill="x")
+    ctk.CTkLabel(row6, text="Joy Index Tracker:             ", text_color="#F0EDE6", font=("Arial", 25)).pack(
+        side="left", pady=10, anchor="nw"
+    )
+    jitd = ctk.CTkComboBox(row6, values=["1 (Least Joy)", "2", "3", "4", "5 (Most Joy)"], **combo_style)
+    jitd.pack(padx=10, pady=10, anchor="nw")
+    ctk.CTkLabel(
+        row6,
+        text="(How much Joy did this transaction give you on a scale of 1 to 5?)",
+        text_color="#D2D2D2",
+        font=("Arial", 20),
+    ).pack(side="left", padx=10, pady=(10, 5), anchor="w")
+
+    def save_transaction():
+        try:
+            amount = float(amte.get())
+        except (TypeError, ValueError):
+            messagebox.showerror("Invalid amount", "Please enter a valid amount.")
+            return
+        if amount <= 0:
+            messagebox.showerror("Invalid amount", "Amount must be greater than 0.")
+            return
+        description = dese.get()
+        category = catd.get()
+        direction = incexd.get()
+        mode = modd.get()
+        try:
+            day_value = int(day.get())
+            month_value = int(month.get())
+            year_value = int(year.get())
+            joy = int(jitd.get()[0])
+        except (TypeError, ValueError, IndexError):
+            messagebox.showerror("Invalid input", "Please complete every field.")
+            return
+        transaction_date = "{}-{:02d}-{:02d}".format(year_value, month_value, day_value)
+        ok, err = add_transaction(
+            username,
+            direction,
+            category,
+            amount,
+            description,
+            transaction_date,
+            payment_mode=mode,
+            joy_index=joy,
+        )
+        if not ok:
+            messagebox.showerror("Could not save", err or "Could not add this transaction.")
+            return
+        messagebox.showinfo("Success", "Transaction added successfully!")
+        amte.delete(0, "end")
+        dese.delete(0, "end")
+
+    ctk.CTkButton(
+        iebox,
+        text="Add transaction",
+        fg_color="#00A998",
+        text_color="white",
+        width=250,
+        height=50,
+        font=("Arial", 20),
+        command=save_transaction,
+    ).pack(pady=(10, 10), padx=50, anchor="se")
+    return ie
 
 
 def build_auth_screen(root, logo_img):
