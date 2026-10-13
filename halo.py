@@ -948,201 +948,259 @@ def inr(n):
     if len(s) <= 3:
         res = s
     else:
-        l3 = s[-3:]
-        rst = s[:-3]
-        grp = []
+        l3, rst, grp = s[-3:], s[:-3], []
         while len(rst) > 2:
-            grp.append(rst[-2:])
+            grp.append(rst[-2:]);
             rst = rst[:-2]
-        if rst:
-            grp.append(rst)
+        if rst: grp.append(rst)
         grp.reverse()
         res = ",".join(grp) + "," + l3
-    if n < 0:
-        return "-Rs. " + res
-    return "Rs. " + res
+    return ("-Rs. " if n < 0 else "Rs. ") + res
 
 
-def pcl(v):
-    return grn if v >= 0 else red
+def pcl(v): return grn if v >= 0 else red
 
 
 def ref():
-    tv = sum(h["value"] for h in lst)
-    ti = sum(h["invested"] for h in lst)
-
-    vlb.configure(text=inr(tv))
+    tv, ti = sum(h["value"] for h in lst), sum(h["invested"] for h in lst)
+    vlb.configure(text=inr(tv));
     ilb.configure(text=inr(ti))
-
     gl = tv - ti
-    yp = (gl / ti * 100) if ti > 0 else 0.0
-
-    sgn = "+" if yp >= 0 else ""
-    ylb.configure(text=sgn + str(round(yp, 1)) + "% YTD", text_color=pcl(yp))
-
-    tg = gl * 0.32
-    tp = (tg / tv * 100) if tv > 0 else 0.0
-
-    sg2 = "+" if tp >= 0 else ""
-    clb.configure(text=sg2 + str(round(tp, 2)) + "% today", text_color=pcl(tp))
-    rlb.configure(text=inr(tg), text_color=pcl(tp))
-    sg3 = "+" if tp >= 0 else ""
-    plb.configure(text=sg3 + str(round(tp, 2)) + "%", text_color=pcl(tp))
-
-    if len(lst) > 0:
-        sh = sorted(lst, key=lambda x: x["value"], reverse=True)
-        tn = [sh[0]["name"]]
-        if len(sh) > 1:
-            tn.append(sh[1]["name"])
-        ts = " and ".join(tn)
-        nlb.configure(
-            text="Your portfolio is led by " + ts +
-                 ". Consider rebalancing if any single holding exceeds 40% of total value."
-        )
+    pct = (gl / ti * 100) if ti else 0.0
+    s = "+" if pct >= 0 else ""
+    ylb.configure(text=f"{s}{round(pct, 1)}% Return", text_color=pcl(pct))
+    rlb.configure(text=inr(gl), text_color=pcl(gl))
+    plb.configure(text=f"{s}{round(pct, 2)}%", text_color=pcl(pct))
+    clb.configure(text=f"{s}{round(pct, 2)}% total", text_color=pcl(pct))
+    if lst:
+        top = max(lst, key=lambda x: x["value"])
+        top_pct = top["value"] / tv * 100 if tv else 0
+        if top_pct >= 40:
+            nlb.configure(text=f"{top['name']} makes up {round(top_pct, 1)}% of your portfolio.",
+                          text_color=red)
+        else:
+            names = [top["name"]]
+            if len(lst) > 1:
+                names.append(lst[1]["name"])
+            nlb.configure(text=f"Your portfolio is led by {' and '.join(names)}.",
+                          text_color=mut)
     else:
-        nlb.configure(
-            text="Add holdings to view portfolio distribution and risk breakdown."
-        )
-
-    cht(tv, ti)
+        nlb.configure(text="Add holdings to view portfolio distribution and risk breakdown.",
+                      text_color=mut)
+    update_bar(tv, ti);
+    render_chart();
     grd()
 
 
-def lrp(c1, c2, t):
-    r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
-    r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
-    r = int(r1 + (r2 - r1) * t)
-    g = int(g1 + (g2 - g1) * t)
-    b = int(b1 + (b2 - b1) * t)
-    return f"#{r:02x}{g:02x}{b:02x}"
+def update_bar(tv, ti):
+    bcv.delete("all");
+    w = bcv.winfo_width()
+    if w > 1:
+        bw = min(w, max(2, int(w * min(1.0, ti / tv if tv else 0))))
+        bcv.create_rectangle(0, 1, bw, 6, fill=acc, outline="")
 
 
-def cht(tv=0, ti=0):
+def render_chart():
     cvs.delete("all")
-    w = cvs.winfo_width()
-    h = cvs.winfo_height()
+    w, h = cvs.winfo_width(), cvs.winfo_height()
     if w < 10 or h < 10:
-        cvs.after(100, lambda: cht(tv, ti))
+        cvs.after(100, render_chart)
         return
+    (draw_donut_chart if current_chart_mode == "allocation"
+     else draw_timeline_chart)(w, h)
 
-    pl, pr, pt, pb = 56, 16, 14, 46
-    cw = w - pl - pr
-    ch = h - pt - pb
 
-    if len(his) == 0:
-        my = pt + ch // 2
+def draw_donut_chart(w, h):
+    if not lst:
+        cvs.create_text(w // 2, h // 2,
+                        text="Add holdings to view allocation",
+                        fill=mut, font=("Segoe UI", 15), anchor="center")
+        return
+    tv = sum(i["value"] for i in lst)
+    if tv <= 0:
+        cvs.create_text(w // 2, h // 2,
+                        text="Total portfolio value is Rs. 0",
+                        fill=mut, font=("Segoe UI", 15), anchor="center")
+        return
+    cx, cy, R = int(w * 0.32), int(h * 0.5), min(int(w * 0.32) - 30,
+                                                 int(h * 0.5) - 25, 105)
+    r_in = int(R * 0.52)
+    start = 90.0
+    for h_item in sorted(lst, key=lambda x: x["value"], reverse=True):
+        f = h_item["value"] / tv
+        ext = -f * 360
+        cvs.create_arc(cx - R, cy - R, cx + R, cy + R,
+                       start=start, extent=ext,
+                       fill=h_item["color"], outline=crd, width=2)
+        if f >= 0.05:
+            md = start + ext / 2
+            rad = math.radians(md)
+            lr = (R + r_in) / 2
+            lx = cx + lr * math.cos(rad)
+            ly = cy - lr * math.sin(rad)
+            cvs.create_text(lx, ly,
+                            text=f"{round(f * 100, 1)}%",
+                            fill="#1B1B1F", font=("Segoe UI", 11, "bold"))
+        start += ext
+    cvs.create_oval(cx - r_in, cy - r_in, cx + r_in, cy + r_in,
+                    fill=crd, outline="")
+    cvs.create_text(cx, cy - 10, text="Holdings",
+                    fill=mut, font=("Segoe UI", 12, "bold"))
+    cvs.create_text(cx, cy + 12, text=str(len(lst)),
+                    fill=txt, font=("Segoe UI", 18, "bold"))
+    leg_x = int(w * 0.58)
+    start_y = max(18, int(h * 0.5 - (min(len(lst), 7) * 30) / 2))
+    for i, h_item in enumerate(sorted(lst, key=lambda x: x["value"], reverse=True)[:7]):
+        y = start_y + i * 30
+        f = h_item["value"] / tv
+        cvs.create_rectangle(leg_x, y, leg_x + 16, y + 16,
+                             fill=h_item["color"])
+        cvs.create_text(leg_x + 26, y + 8,
+                        text=h_item["ticker"], anchor="w",
+                        fill=txt, font=("Segoe UI", 14, "bold"))
+        cvs.create_text(leg_x + 175, y + 8,
+                        text=f"{round(f * 100, 1)}%", anchor="w",
+                        fill=acc, font=("Segoe UI", 14, "bold"))
+    if len(lst) > 7:
+        rem = sum(x["value"] for x in lst[7:]) / tv
+        y = start_y + 7 * 30
+        cvs.create_rectangle(leg_x, y, leg_x + 16, y + 16,
+                             fill="#6e7f8f")
+        cvs.create_text(leg_x + 26, y + 8,
+                        text=f"Others ({len(lst) - 7})", anchor="w",
+                        fill=mut, font=("Segoe UI", 13))
+        cvs.create_text(leg_x + 175, y + 8,
+                        text=f"{round(rem * 100, 1)}%", anchor="w",
+                        fill=mut, font=("Segoe UI", 13))
+
+
+def draw_timeline_chart(w, h):
+    pl, pr, pt, pb = 75, 20, 20, 50
+    cw, ch = w - pl - pr, h - pt - pb
+    if not his:
+        y = pt + ch // 2
         seg = 8
         x = pl
         while x < w - pr:
-            cvs.create_line(x, my, min(x + seg, w - pr), my, fill=brd, width=1)
+            cvs.create_line(x, y, min(x + seg, w - pr), y, fill=brd, width=1)
             x += seg * 2
-        cvs.create_text(w // 2, my - 14, text="Add an investment to see your chart", fill=mut, font=("Segoe UI", 9), anchor="s")
+        cvs.create_text(w // 2, y - 14,
+                        text="Add an investment to see your chart",
+                        fill=mut, font=("Segoe UI", 13), anchor="s")
         return
-
+    yv = [e[1] - e[2] for e in his]
+    pnl = yv[-1]
+    line_col, fill_col = (acc, "#382E1E") if pnl >= 0 else (red, "#3A1E1E")
     if len(his) == 1:
-        t, val, inv = his[0]
-        dx = pl + cw // 2
-        dy = pt + ch // 2
-        cvs.create_line(pl, dy, w - pr, dy, fill=brd, width=1)
-        cvs.create_oval(dx - 5, dy - 5, dx + 5, dy + 5, fill=acc, outline=crd)
-        cvs.create_text(dx, dy - 10, text=inr(val), fill=txt, font=("Segoe UI", 9, "bold"), anchor="s")
-        tst = t.strftime("%d %b %Y  %H:%M")
-        cvs.create_text(dx, dy + 10, text=tst, fill=acc, font=("Segoe UI", 8), anchor="n")
+        mx = pl + cw // 2
+        my = pt + ch // 2
+        cvs.create_line(pl, my, w - pr, my, fill=brd, width=1)
+        cvs.create_oval(mx - 6, my - 6, mx + 6, my + 6,
+                        fill=line_col, outline=crd)
+        s = "+" if pnl >= 0 else ""
+        cvs.create_text(mx, my - 14,
+                        text=f"P&L: {s}{inr(pnl)}", fill=line_col,
+                        font=("Segoe UI", 13, "bold"), anchor="s")
+        cvs.create_text(mx, my + 14,
+                        text=his[0][0].strftime("%d %b %Y %H:%M"),
+                        fill=mut, font=("Segoe UI", 11), anchor="n")
         return
-
-    yv = [e[1] for e in his]
-    ts = [e[0] for e in his]
-
-    mn, mx = min(yv), max(yv)
-    mnd, mxd = mn * 0.97, mx * 1.03
+    mn, mx = min(min(yv), 0), max(max(yv), 0)
+    pad = (mx - mn) * 0.18 if mx != mn else 500
+    mnd, mxd = mn - pad, mx + pad
     rng = mxd - mnd if mxd != mnd else 1.0
-
-    np = len(yv)
-    ng = 4
-    for i in range(ng + 1):
-        gy = pt + (ch / ng) * i
-        rv = mxd - (rng / ng) * i
-        cvs.create_line(pl, gy, w - pr, gy, fill="#1e2d3d", width=1)
-        tck = ("Rs. " + str(int(rv // 1000)) + "k") if rv >= 100_000 else ("Rs. " + str(int(rv)))
-        cvs.create_text(pl - 4, gy, text=tck, anchor="e", fill=mut, font=("Segoe UI", 8))
-
-    cds = []
-    for i, val in enumerate(yv):
-        x = pl + (i / (np - 1)) * cw
-        y = pt + ch - ((val - mnd) / rng) * ch
-        cds.append((x, y))
-
-    by = pt + ch
-    fpt = list(cds) + [(cds[-1][0], by), (cds[0][0], by)]
-    flt = [c for p in fpt for c in p]
-
-    cvs.create_polygon(flt, fill="#003b29", outline="")
-
+    for i in range(5):
+        gy = pt + (ch / 4) * i
+        rv = mxd - (rng / 4) * i
+        cvs.create_line(pl, gy, w - pr, gy, fill="#2F2F36", width=1)
+        s = "+" if rv > 0 else ""
+        cvs.create_text(pl - 8, gy,
+                        text=f"{s}Rs. {int(round(rv))}",
+                        anchor="e",
+                        fill=grn if rv > 1 else (red if rv < -1 else mut),
+                        font=("Segoe UI", 11))
+    cds = [(pl + i / (len(yv) - 1) * cw,
+            pt + ch - ((v - mnd) / rng) * ch) for i, v in enumerate(yv)]
+    zero_y = pt + ch - ((-mnd) / rng * ch)
+    cvs.create_line(pl, zero_y, w - pr, zero_y,
+                    fill=mut, width=1, dash=(3, 3))
+    cvs.create_text(w - pr, zero_y - 10,
+                    text="Break-even", fill=mut,
+                    font=("Segoe UI", 10), anchor="e")
+    fpt = cds + [(cds[-1][0], pt + ch), (cds[0][0], pt + ch)]
+    cvs.create_polygon([c for p in fpt for c in p],
+                       fill=fill_col, outline="")
     fcd = [c for p in cds for c in p]
-    if len(cds) >= 3:
-        cvs.create_line(fcd, fill=acc, width=2, smooth=True)
-    else:
-        cvs.create_line(fcd, fill=acc, width=2)
-
+    cvs.create_line(fcd, fill=line_col, width=2,
+                    smooth=len(cds) >= 3)
     for i, (cx, cy) in enumerate(cds):
-        flg = (i == len(cds) - 1)
-        r = 5 if flg else 3
-        cvs.create_oval(cx - r, cy - r, cx + r, cy + r, fill=acc, outline=crd)
-
-    for i, t in enumerate(ts):
+        r = 6 if i == len(cds) - 1 else 4
+        cvs.create_oval(cx - r, cy - r, cx + r, cy + r,
+                        fill=line_col, outline=crd)
+    for i, t in enumerate([e[0] for e in his]):
         cx = cds[i][0]
-        dl = t.strftime("%d %b")
-        tl = t.strftime("%H:%M")
-        ltx = dl + "\n" + tl
-        flg = (i == len(ts) - 1)
-        col = acc if flg else mut
-        wgt = "bold" if flg else "normal"
-        cvs.create_text(cx, by + 5, text=ltx, fill=col, font=("Segoe UI", 7, wgt), anchor="n", justify="center")
+        cvs.create_text(cx, pt + ch + 8,
+                        text=t.strftime("%d %b\n%H:%M"),
+                        fill=line_col if i == len(his) - 1 else mut,
+                        font=("Segoe UI", 10,
+                              "bold" if i == len(his) - 1 else "normal"),
+                        anchor="n", justify="center")
+
+
+def toggle_chart_mode(v):
+    global current_chart_mode
+    current_chart_mode = "allocation" if "Pie" in v else "timeline"
+    render_chart()
 
 
 def grd():
     for w in hfr.winfo_children():
         w.destroy()
-
-    if len(lst) == 0:
-        el = ctk.CTkLabel(hfr, text="No holdings yet  |  click + New Investment", font=("Segoe UI", 11), text_color=mut)
-        el.grid(row=0, column=0, columnspan=3, pady=30)
+    if not lst:
+        ctk.CTkLabel(hfr,
+                     text="No holdings yet  |  click + New Investment",
+                     font=("Segoe UI", 14), text_color=mut) \
+            .grid(row=0, column=0, columnspan=3, pady=30)
         return
-
-    col, row = 0, 0
+    col = row = 0
     for h in lst:
         gl = h["value"] - h["invested"]
-        pct = (gl / h["invested"] * 100) if h["invested"] > 0 else 0.0
-
-        cd = ctk.CTkFrame(hfr, fg_color=crd, corner_radius=12, border_width=1, border_color=brd)
-        cd.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+        pct = (gl / h["invested"] * 100) if h["invested"] else 0
+        cd = ctk.CTkFrame(hfr, fg_color=crd,
+                          corner_radius=12, border_width=1,
+                          border_color=brd)
+        cd.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
         cd.columnconfigure(1, weight=1)
-
-        ifr = ctk.CTkFrame(cd, fg_color=h["color"], width=42, height=42, corner_radius=10)
-        ifr.grid(row=0, column=0, rowspan=2, padx=(12, 8), pady=12)
+        ifr = ctk.CTkFrame(cd, fg_color=h["color"],
+                           width=54, height=54, corner_radius=10)
+        ifr.grid(row=0, column=0, rowspan=2, padx=(14, 10), pady=12)
         ifr.grid_propagate(False)
-
-        letter_lbl = ctk.CTkLabel(ifr, text=h["letter"], font=("Segoe UI", 16, "bold"), text_color="#ffffff")
-        letter_lbl.place(relx=0.5, rely=0.5, anchor="center")
-
-        name_lbl = ctk.CTkLabel(cd, text=h["name"], font=("Segoe UI", 13, "bold"), text_color=txt)
-        name_lbl.grid(row=0, column=1, sticky="sw", pady=(12, 0))
-
-        slb = ctk.CTkLabel(cd, text=h["sub"], font=("Segoe UI", 10), text_color=mut)
-        slb.grid(row=1, column=1, sticky="nw", pady=(0, 12))
-
-        value_lbl = ctk.CTkLabel(cd, text=inr(h["value"]), font=("Segoe UI", 13, "bold"), text_color=txt)
-        value_lbl.grid(row=0, column=2, sticky="se", padx=(8, 12), pady=(12, 0))
-
-        sgn = "+" if pct >= 0 else ""
-        pct_lbl = ctk.CTkLabel(cd, text=sgn + str(round(pct, 1)) + "%", font=("Segoe UI", 11), text_color=pcl(pct))
-        pct_lbl.grid(row=1, column=2, sticky="ne", padx=(8, 12), pady=(0, 12))
-
-        col += 1
-        if col == 3:
-            col = 0
-            row += 1
-
+        ctk.CTkLabel(ifr, text=h["letter"],
+                     font=("Segoe UI", 22, "bold"),
+                     text_color="#1B1B1F") \
+            .place(relx=0.5, rely=0.5, anchor="center")
+        ctk.CTkLabel(cd, text=h["name"],
+                     font=("Segoe UI", 17, "bold"),
+                     text_color=txt).grid(row=0, column=1,
+                                          sticky="sw", pady=(12, 0))
+        ctk.CTkLabel(cd, text=h["sub"],
+                     font=("Segoe UI", 13),
+                     text_color=mut).grid(row=1, column=1,
+                                          sticky="nw", pady=(0, 12))
+        ctk.CTkLabel(cd, text=inr(h["value"]),
+                     font=("Segoe UI", 17, "bold"),
+                     text_color=txt).grid(row=0, column=2,
+                                          sticky="se", padx=(8, 14),
+                                          pady=(12, 0))
+        s = "+" if pct >= 0 else ""
+        ctk.CTkLabel(cd,
+                     text=f"{s}{round(pct, 1)}%",
+                     font=("Segoe UI", 15, "bold"),
+                     text_color=pcl(pct)) \
+            .grid(row=1, column=2, sticky="ne",
+                  padx=(8, 14), pady=(0, 12))
+        col = (col + 1) % 3
+        row += col == 0
     for c in range(3):
         hfr.columnconfigure(c, weight=1)
 
@@ -1150,340 +1208,439 @@ def grd():
 def add():
     win = ctk.CTkToplevel(app)
     win.title("Add Investment")
-    win.geometry("400x370")
+    win.geometry("480x460")
     win.resizable(False, False)
     win.configure(fg_color=bg)
     win.grab_set()
     win.lift()
-
-    tlb = ctk.CTkLabel(win, text="Add Investment", font=("Segoe UI", 15, "bold"), text_color=txt)
-    tlb.pack(anchor="w", padx=20, pady=(18, 12))
+    ctk.CTkLabel(win, text="Add Investment",
+                 font=("Segoe UI", 20, "bold"),
+                 text_color=txt).pack(anchor="w", padx=22,
+                                      pady=(18, 12))
 
     r1 = ctk.CTkFrame(win, fg_color="transparent")
-    r1.pack(fill="x", padx=20, pady=4)
-    r1.columnconfigure(0, weight=1)
-    r1.columnconfigure(1, weight=1)
-
-    ctk.CTkLabel(r1, text="Asset Name", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=0, sticky="w")
-    enm = ctk.CTkEntry(r1, placeholder_text="e.g. Reliance", fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
+    r1.pack(fill="x", padx=22, pady=6)
+    r1.columnconfigure((0, 1), weight=1)
+    ctk.CTkLabel(r1, text="Asset Name",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).grid(row=0, column=0, sticky="w")
+    enm = ctk.CTkEntry(r1, placeholder_text="e.g. Reliance",
+                       font=("Segoe UI", 14),
+                       fg_color=ibg, border_color=brd,
+                       text_color=txt, placeholder_text_color=mut)
     enm.grid(row=1, column=0, sticky="ew", padx=(0, 6))
-
-    ctk.CTkLabel(r1, text="Ticker", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=1, sticky="w")
-    etk = ctk.CTkEntry(r1, placeholder_text="RELIANCE", fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
+    ctk.CTkLabel(r1, text="Ticker",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).grid(row=0, column=1, sticky="w")
+    etk = ctk.CTkEntry(r1, placeholder_text="RELIANCE",
+                       font=("Segoe UI", 14),
+                       fg_color=ibg, border_color=brd,
+                       text_color=txt, placeholder_text_color=mut)
     etk.grid(row=1, column=1, sticky="ew", padx=(6, 0))
 
     r2 = ctk.CTkFrame(win, fg_color="transparent")
-    r2.pack(fill="x", padx=20, pady=4)
-    r2.columnconfigure(0, weight=1)
-    r2.columnconfigure(1, weight=1)
-
-    ctk.CTkLabel(r2, text="Type", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=0, sticky="w")
-    ctp = ctk.CTkComboBox(r2, values=["Equity", "Crypto", "Mutual Fund", "ETF", "Bond"], fg_color=ibg, border_color=brd, text_color=txt, button_color=brd, dropdown_fg_color=crd)
-    ctp.set("Equity")
-    ctp.grid(row=1, column=0, sticky="ew", padx=(0, 6))
-
-    ctk.CTkLabel(r2, text="Subtitle", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=1, sticky="w")
-    esb = ctk.CTkEntry(r2, placeholder_text="45 shares | Equity", fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
+    r2.pack(fill="x", padx=22, pady=6)
+    r2.columnconfigure((0, 1), weight=1)
+    ctk.CTkLabel(r2, text="Type",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).grid(row=0, column=0, sticky="w")
+    combo_type = ctk.CTkComboBox(r2,
+                                 values=["Equity", "Crypto", "Mutual Fund",
+                                         "ETF", "Bond"],
+                                 font=("Segoe UI", 14),
+                                 fg_color=ibg, border_color=brd,
+                                 text_color=txt, button_color=brd,
+                                 dropdown_fg_color=crd)
+    combo_type.set("Equity")
+    combo_type.grid(row=1, column=0, sticky="ew", padx=(0, 6))
+    ctk.CTkLabel(r2, text="Subtitle",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).grid(row=0, column=1, sticky="w")
+    esb = ctk.CTkEntry(r2,
+                       placeholder_text="45 shares | Equity",
+                       font=("Segoe UI", 14),
+                       fg_color=ibg, border_color=brd,
+                       text_color=txt, placeholder_text_color=mut)
     esb.grid(row=1, column=1, sticky="ew", padx=(6, 0))
 
     r3 = ctk.CTkFrame(win, fg_color="transparent")
-    r3.pack(fill="x", padx=20, pady=4)
-    r3.columnconfigure(0, weight=1)
-    r3.columnconfigure(1, weight=1)
-
-    ctk.CTkLabel(r3, text="Invested (Rs.)", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=0, sticky="w")
-    ein = ctk.CTkEntry(r3, placeholder_text="100000", fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
+    r3.pack(fill="x", padx=22, pady=6)
+    r3.columnconfigure((0, 1), weight=1)
+    ctk.CTkLabel(r3, text="Invested (Rs.)",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).grid(row=0, column=0, sticky="w")
+    ein = ctk.CTkEntry(r3, placeholder_text="100000",
+                       font=("Segoe UI", 14),
+                       fg_color=ibg, border_color=brd,
+                       text_color=txt, placeholder_text_color=mut)
     ein.grid(row=1, column=0, sticky="ew", padx=(0, 6))
-
-    ctk.CTkLabel(r3, text="Current Value (Rs.)", font=("Segoe UI", 10), text_color=mut).grid(row=0, column=1, sticky="w")
-    eva = ctk.CTkEntry(r3, placeholder_text="128450", fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
+    ctk.CTkLabel(r3, text="Current Value (Rs.)",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).grid(row=0, column=1, sticky="w")
+    eva = ctk.CTkEntry(r3, placeholder_text="128450",
+                       font=("Segoe UI", 14),
+                       fg_color=ibg, border_color=brd,
+                       text_color=txt, placeholder_text_color=mut)
     eva.grid(row=1, column=1, sticky="ew", padx=(6, 0))
 
     r4 = ctk.CTkFrame(win, fg_color="transparent")
-    r4.pack(fill="x", padx=20, pady=4)
-
-    ctk.CTkLabel(r4, text="Icon Color", font=("Segoe UI", 10), text_color=mut).pack(anchor="w")
-
-    cop = ["Blue", "Orange", "Teal", "Purple", "Red", "Green", "Yellow"]
-    cva = ["#3b82f6", "#f97316", "#00d4aa", "#a78bfa", "#f43f5e", "#22c55e", "#eab308"]
-
-    ccl = ctk.CTkComboBox(r4, values=cop, fg_color=ibg, border_color=brd, text_color=txt, button_color=brd, dropdown_fg_color=crd)
-    ccl.set("Blue")
+    r4.pack(fill="x", padx=22, pady=6)
+    ctk.CTkLabel(r4, text="Icon Color",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).pack(anchor="w")
+    cop = ["Gold", "Blue", "Emerald", "Coral", "Purple", "Teal", "Amber"]
+    cva = ["#C9A96E", "#4E80EE", "#38A169", "#E56B6F",
+           "#9D72FF", "#319795", "#D69E2E"]
+    ccl = ctk.CTkComboBox(r4, values=cop,
+                          font=("Segoe UI", 14),
+                          fg_color=ibg, border_color=brd,
+                          text_color=txt, button_color=brd,
+                          dropdown_fg_color=crd)
+    ccl.set("Gold")
     ccl.pack(fill="x")
 
     def do():
-        nm = enm.get().strip()
-        tkr = etk.get().strip().upper()
-        typ = ctp.get()
-        sub = esb.get().strip()
-        ist = ein.get().strip()
-        vst = eva.get().strip()
-        ccn = ccl.get()
-
-        if nm == "":
-            messagebox.showerror("Missing Field", "Please enter an asset name.", parent=win)
+        nm, tkr = enm.get().strip(), etk.get().strip().upper()
+        typ, sub = combo_type.get(), esb.get().strip()
+        inv = float(ein.get().replace(",", "")) if ein.get().replace(",", "") else 0
+        val = float(eva.get().replace(",", "")) if eva.get().replace(",", "") else 0
+        if not nm:
+            messagebox.showerror("Missing Field",
+                                 "Enter asset name.", parent=win)
             return
-
-        if ist == "" or not ist.replace(".", "", 1).isdigit():
-            messagebox.showerror("Invalid Input", "Please enter a valid invested amount.", parent=win)
+        if inv < 0 or val < 0:
+            messagebox.showerror("Invalid Input",
+                                 "Positive numbers required.", parent=win)
             return
-
-        if vst == "" or not vst.replace(".", "", 1).isdigit():
-            messagebox.showerror("Invalid Input", "Please enter a valid current value.", parent=win)
-            return
-
-        inv = float(ist)
-        val = float(vst)
-
-        if tkr == "":
+        if not tkr:
             tkr = nm[0].upper()
-
-        if sub == "":
+        if not sub:
             sub = typ
+        pcl = cva[cop.index(ccl.get())] if ccl.get() in cop else acc
 
-        pcl_color = "#3b82f6"
-        for idx, cnm in enumerate(cop):
-            if cnm == ccn:
-                pcl_color = cva[idx]
-                break
-
-        existing = next((h for h in lst if h["ticker"] == tkr and h["type"] == typ), None)
-        added_at = dt.datetime.now()
+        existing = next((h for h in lst
+                         if h["ticker"] == tkr and h["type"] == typ), None)
         if existing:
-            existing["name"] = nm
-            existing["sub"] = sub
             existing["invested"] += inv
             existing["value"] += val
-            existing["color"] = pcl_color
+            existing["color"] = pcl
             existing["letter"] = tkr[0]
-            existing["added_at"] = added_at
-            if not update_holding_in_db(existing):
-                return
+            existing["added_at"] = datetime.now()
+            update_holding_in_db(existing)
+            nh = existing
         else:
-            nh = {
-                "name": nm,
-                "ticker": tkr,
-                "type": typ,
-                "sub": sub,
-                "invested": inv,
-                "value": val,
-                "color": pcl_color,
-                "letter": tkr[0],
-                "added_at": added_at,
-            }
+            nh = {"name": nm, "ticker": tkr, "type": typ,
+                  "sub": sub, "invested": inv, "value": val,
+                  "color": pcl, "letter": tkr[0],
+                  "added_at": datetime.now()}
             lst.append(nh)
-            if not save_holding_to_db(nh):
-                lst.pop()
-                return
+            save_holding_to_db(nh)
 
-        tv = sum(h["value"] for h in lst)
-        ti = sum(h["invested"] for h in lst)
-        his.append((added_at, tv, ti))
-
+        his.append((nh["added_at"],
+                    sum(i["value"] for i in lst),
+                    sum(i["invested"] for i in lst)))
         win.destroy()
         ref()
 
-    abt = ctk.CTkButton(
-        win,
-        text="Add to Portfolio",
-        fg_color=acc,
-        text_color=bg,
-        font=("Segoe UI", 12, "bold"),
-        hover_color="#00b899",
-        command=do
-    )
-    abt.pack(fill="x", padx=20, pady=(10, 18))
+    ctk.CTkButton(win, text="Add to Portfolio",
+                  fg_color=acc, text_color=bg,
+                  font=("Segoe UI", 15, "bold"),
+                  hover_color="#B89758",
+                  command=do) \
+        .pack(fill="x", padx=22, pady=(14, 20))
 
 
 def pop():
-    if len(lst) == 0:
-        messagebox.showinfo("Portfolio Insight", "Add holdings first to view portfolio breakdown.")
+    win = ctk.CTkToplevel(app)
+    win.title("Portfolio Breakdown")
+    win.geometry("780x640")
+    win.configure(fg_color=bg)
+    win.grab_set()
+    win.lift()
+    top = ctk.CTkFrame(win, fg_color="transparent")
+    top.pack(fill="x", padx=24, pady=(20, 14))
+    ctk.CTkLabel(top, text="Portfolio Breakdown",
+                 font=("Segoe UI", 26, "bold"),
+                 text_color=txt).pack(side="left")
+    ctk.CTkButton(top, text="Close",
+                  fg_color=crd, border_width=1, border_color=brd,
+                  text_color=txt, font=("Segoe UI", 13, "bold"),
+                  hover_color=brd, width=80, height=32,
+                  corner_radius=16,
+                  command=win.destroy).pack(side="right")
+    if not lst:
+        ctk.CTkLabel(win,
+                     text="No holdings yet. Click + New Investment to add your first asset.",
+                     font=("Segoe UI", 16), text_color=mut) \
+            .pack(expand=True, pady=60)
         return
+    tv, ti = sum(h["value"] for h in lst), sum(h["invested"] for h in lst)
+    gl = tv - ti
+    pct = (gl / ti * 100) if ti else 0
+    s = "+" if pct >= 0 else ""
+    sc = ctk.CTkFrame(win, fg_color=crd,
+                      corner_radius=12, border_width=1,
+                      border_color=brd)
+    sc.pack(fill="x", padx=24, pady=(0, 16))
+    sc.columnconfigure((0, 1, 2), weight=1)
+    for txtc, valc in (("TOTAL INVESTED", ti),
+                       ("CURRENT VALUE", tv),
+                       ("NET UNREALIZED P&L", f"{s}{inr(gl)} ({s}{round(pct, 1)}%)")):
+        frm = ctk.CTkFrame(sc, fg_color="transparent")
+        frm.grid(row=0,
+                 column=("TOTAL INVESTED",
+                         "CURRENT VALUE",
+                         "NET UNREALIZED P&L".split()[0]).index(txtc),
+                 padx=18, pady=16, sticky="w")
+        ctk.CTkLabel(frm, text=txtc,
+                     font=("Segoe UI", 12, "bold"),
+                     text_color=mut).pack(anchor="w")
+        ctk.CTkLabel(frm,
+                     text=inr(valc) if isinstance(valc, int) else valc,
+                     font=("Segoe UI", 22, "bold"),
+                     text_color=txt if isinstance(valc, int) else pcl(gl)) \
+            .pack(anchor="w", pady=(4, 0))
+    ctk.CTkLabel(win, text="Holdings Allocation",
+                 font=("Segoe UI", 18, "bold"),
+                 text_color=txt).pack(anchor="w", padx=24, pady=(0, 10))
+    sfr = ctk.CTkScrollableFrame(win, fg_color=bg,
+                                 scrollbar_button_color=brd)
+    sfr.pack(fill="both", expand=True, padx=24, pady=(0, 20))
+    for h in sorted(lst, key=lambda x: x["value"], reverse=True):
+        hgl = h["value"] - h["invested"]
+        hpct = (hgl / h["invested"] * 100) if h["invested"] else 0
+        alloc = (h["value"] / tv * 100) if tv else 0
+        sg = "+" if hpct >= 0 else ""
+        row = ctk.CTkFrame(sfr, fg_color=crd,
+                           corner_radius=12, border_width=1,
+                           border_color=brd)
+        row.pack(fill="x", pady=6)
+        row.columnconfigure(1, weight=1)
+        dot = ctk.CTkFrame(row, fg_color=h["color"],
+                           width=46, height=46, corner_radius=10)
+        dot.grid(row=0, column=0, rowspan=2,
+                 padx=(14, 12), pady=12)
+        dot.grid_propagate(False)
+        ctk.CTkLabel(dot, text=h["letter"],
+                     font=("Segoe UI", 18, "bold"),
+                     text_color="#1B1B1F") \
+            .place(relx=0.5, rely=0.5, anchor="center")
+        ctk.CTkLabel(row,
+                     text=f"{h['name']} ({h['ticker']})",
+                     font=("Segoe UI", 16, "bold"),
+                     text_color=txt).grid(row=0, column=1,
+                                          sticky="w", pady=(12, 0))
+        ctk.CTkLabel(row,
+                     text=f"{h['sub']}  |  {round(alloc, 1)}% of total portfolio",
+                     font=("Segoe UI", 13), text_color=mut) \
+            .grid(row=1, column=1, sticky="w", pady=(0, 12))
+        ctk.CTkLabel(row, text=inr(h["value"]),
+                     font=("Segoe UI", 17, "bold"),
+                     text_color=txt) \
+            .grid(row=0, column=2, sticky="e",
+                  padx=(10, 16), pady=(12, 0))
+        ctk.CTkLabel(row,
+                     text=f"{sg}{round(hpct, 1)}%  ({sg}{inr(hgl)})",
+                     font=("Segoe UI", 14, "bold"),
+                     text_color=pcl(hgl)) \
+            .grid(row=1, column=2, sticky="e",
+                  padx=(10, 16), pady=(0, 12))
+        if h.get("id"):
+            ctk.CTkButton(row, text="Remove",
+                          fg_color="transparent", border_width=1,
+                          border_color=brd, hover_color="#3A1E1E",
+                          text_color=red, width=70, height=28,
+                          font=("Segoe UI", 12, "bold"),
+                          corner_radius=14,
+                          command=lambda hid=h["id"]:
+                          (delete_holding_from_db(hid),
+                           win.destroy(),
+                           pop())) \
+                .grid(row=0, column=3, rowspan=2,
+                      padx=(0, 16), pady=12)
 
-    tv = sum(h["value"] for h in lst)
-    ti = sum(h["invested"] for h in lst)
 
-    lns = ["Portfolio Summary & Breakdown\n"]
-    lns.append("Total Invested : " + inr(ti))
-    lns.append("Current Value  : " + inr(tv))
-
-    g = tv - ti
-    gp = (g / ti * 100) if ti > 0 else 0.0
-    sgn = "+" if g >= 0 else ""
-    lns.append("Overall P&L    : " + sgn + inr(g) + " (" + sgn + str(round(gp, 1)) + "%)\n")
-
-    lns.append("Holdings Allocation:")
-    for h in lst:
-        gl = h["value"] - h["invested"]
-        p = (gl / h["invested"] * 100) if h["invested"] > 0 else 0.0
-        s = "+" if p >= 0 else ""
-        lns.append("  " + h["name"] + " : " + inr(h["value"]) + " (" + s + str(round(p, 1)) + "%)")
-
-    messagebox.showinfo("Portfolio Breakdown", "\n".join(lns))
-
-
-def dbr(e=None):
-    bcv.delete("all")
-    w = bcv.winfo_width()
-    bcv.create_rectangle(0, 1, int(w * 0.7), 5, fill=acc, outline="")
+def delete_holding_from_db(holding_id):
+    global lst, his
+    user = _investment_user()
+    if not user:
+        return False
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            "delete from holdings where id = %s and user_id = %s",
+            (holding_id, user["id"]),
+        )
+        connection.commit()
+        cursor.close()
+        connection.close()
+        lst = [holding for holding in lst if holding.get("id") != holding_id]
+        his.append((dt.datetime.now(),
+                    sum(holding["value"] for holding in lst),
+                    sum(holding["invested"] for holding in lst)))
+        ref()
+        return True
+    except Exception as e:
+        messagebox.showerror("DB Error", f"Delete failed:\n{e}")
+        return False
 
 
 def build_investments(parent, username):
-    global app, vlb, ylb, clb, cvs, hfr, ilb, bcv, rlb, plb, nlb, investment_username
-
+    global app, ctl, vlb, ilb, ylb, clb, cvs, hfr, bcv, rlb, plb, nlb
+    global investment_username, current_chart_mode
     investment_username = username
+    current_chart_mode = "allocation"
     app = parent
     app.configure(fg_color=bg)
-
-    bar = ctk.CTkFrame(app, fg_color=bg, height=50)
-    bar.pack(fill="x", padx=16, pady=(16, 0))
+    load_investments_from_db()
+    bar = ctk.CTkFrame(app, fg_color=bg, height=65)
+    bar.pack(fill="x", padx=20, pady=(16, 0))
     bar.pack_propagate(False)
-
-    lbl = ctk.CTkLabel(bar, text="Investments", font=("Segoe UI", 20, "bold"), text_color=txt)
-    lbl.pack(side="left", pady=10)
-
-    btn = ctk.CTkButton(
-        bar,
-        text="+ New Investment",
-        fg_color=crd,
-        border_width=1,
-        border_color=brd,
-        text_color=txt,
-        corner_radius=20,
-        font=("Segoe UI", 12),
-        hover_color=brd,
-        command=add
-    )
-    btn.pack(side="right", pady=10)
+    logo_img = (ctk.CTkImage(Image.open("logo.png"), size=(135, 48))
+                if os.path.exists("logo.png") else None)
+    if logo_img:
+        ctk.CTkLabel(bar, image=logo_img, text="").pack(side="left",
+                                                        padx=(0, 16), pady=8)
+    ctk.CTkLabel(bar, text="Investments",
+                 font=("Segoe UI", 32, "bold"),
+                 text_color=txt).pack(side="left", pady=8)
+    ctk.CTkButton(bar, text="+ New Investment",
+                  fg_color=crd, border_width=1, border_color=brd,
+                  text_color=txt, corner_radius=20,
+                  font=("Segoe UI", 15, "bold"),
+                  hover_color=brd, command=add) \
+        .pack(side="right", pady=8)
 
     frm = ctk.CTkFrame(app, fg_color=bg)
-    frm.pack(fill="both", expand=True, padx=16, pady=12)
+    frm.pack(fill="both", expand=True, padx=20, pady=14)
     frm.columnconfigure(0, weight=3)
     frm.columnconfigure(1, weight=1)
     frm.rowconfigure(0, weight=1)
 
     lft = ctk.CTkFrame(frm, fg_color=bg)
-    lft.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
-
+    lft.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
     rgt = ctk.CTkFrame(frm, fg_color=bg)
-    rgt.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
+    rgt.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
-    ccd = ctk.CTkFrame(lft, fg_color=crd, corner_radius=14, border_width=1, border_color=brd)
-    ccd.pack(fill="x", pady=(0, 12))
-
-    ctp = ctk.CTkFrame(ccd, fg_color="transparent")
-    ctp.pack(fill="x", padx=20, pady=(18, 0))
-
-    ctl = ctk.CTkFrame(ctp, fg_color="transparent")
+    ccd = ctk.CTkFrame(lft, fg_color=crd,
+                       corner_radius=14, border_width=1,
+                       border_color=brd)
+    ccd.pack(fill="x", pady=(0, 14))
+    header = ctk.CTkFrame(ccd, fg_color="transparent")
+    header.pack(fill="x", padx=22, pady=(18, 0))
+    ctl = ctk.CTkFrame(header, fg_color="transparent")
     ctl.pack(side="left")
-
-    ctk.CTkLabel(ctl, text="TOTAL PORTFOLIO VALUE", font=("Segoe UI", 10), text_color=mut).pack(anchor="w")
-
-    vlb = ctk.CTkLabel(ctl, text="Rs. 0", font=("Segoe UI", 32, "bold"), text_color=txt)
+    ctk.CTkLabel(ctl, text="TOTAL PORTFOLIO VALUE",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).pack(anchor="w")
+    vlb = ctk.CTkLabel(ctl, text="Rs. 0",
+                       font=("Segoe UI", 44, "bold"),
+                       text_color=txt)
     vlb.pack(anchor="w")
-
-    ylb = ctk.CTkLabel(ctp, text="+0% YTD", font=("Segoe UI", 11), text_color=acc)
-    ylb.pack(side="right", anchor="n", pady=6)
-
+    top_right = ctk.CTkFrame(header, fg_color="transparent")
+    top_right.pack(side="right", anchor="n")
+    ylb = ctk.CTkLabel(top_right,
+                       text="+0.0% Return",
+                       font=("Segoe UI", 16, "bold"),
+                       text_color=acc)
+    ylb.pack(anchor="e", pady=(0, 6))
+    chart_tab = ctk.CTkSegmentedButton(top_right,
+                                       values=["Allocation Pie",
+                                               "Performance (P&L)"],
+                                       command=toggle_chart_mode,
+                                       font=("Segoe UI", 12, "bold"),
+                                       fg_color=ibg, selected_color=acc,
+                                       selected_hover_color="#B89758",
+                                       unselected_color=crd,
+                                       text_color=txt)
+    chart_tab.set("Allocation Pie")
+    chart_tab.pack(anchor="e")
     lrw = ctk.CTkFrame(ccd, fg_color="transparent")
-    lrw.pack(fill="x", padx=20, pady=(4, 0))
-
-    ldc = tk.Canvas(lrw, width=10, height=10, bg=crd, highlightthickness=0)
-    ldc.create_oval(1, 1, 9, 9, fill=acc, outline="")
+    lrw.pack(fill="x", padx=22, pady=(4, 0))
+    ldc = tk.Canvas(lrw, width=12, height=12,
+                    bg=crd, highlightthickness=0)
+    ldc.create_oval(1, 1, 11, 11, fill=acc, outline="")
     ldc.pack(side="left", pady=3)
-
-    ctk.CTkLabel(lrw, text="  LIVE  |  ", font=("Segoe UI", 11), text_color=txt).pack(side="left")
-
-    clb = ctk.CTkLabel(lrw, text="+0% today", font=("Segoe UI", 11), text_color=acc)
+    ctk.CTkLabel(lrw, text="  PORTFOLIO  |  ",
+                 font=("Segoe UI", 14), text_color=txt).pack(side="left")
+    clb = ctk.CTkLabel(lrw, text="+0% total",
+                       font=("Segoe UI", 14, "bold"),
+                       text_color=acc)
     clb.pack(side="left")
+    cvs = tk.Canvas(ccd, height=260, bg=crd,
+                    highlightthickness=0)
+    cvs.pack(fill="x", padx=22, pady=(8, 16))
+    cvs.bind("<Configure>", lambda e: render_chart())
 
-    cvs = tk.Canvas(ccd, height=240, bg=crd, highlightthickness=0)
-    cvs.pack(fill="x", padx=20, pady=(6, 16))
-    cvs.bind("<Configure>", lambda e: cht())
-
-    hlb = ctk.CTkLabel(lft, text="Holdings", font=("Segoe UI", 16, "bold"), text_color=txt)
-    hlb.pack(anchor="w", pady=(0, 8))
-
-    hsc = ctk.CTkScrollableFrame(lft, fg_color=bg, scrollbar_button_color=brd)
+    ctk.CTkLabel(lft, text="Holdings",
+                 font=("Segoe UI", 24, "bold"),
+                 text_color=txt).pack(anchor="w", pady=(0, 10))
+    hsc = ctk.CTkScrollableFrame(lft, fg_color=bg,
+                                 scrollbar_button_color=brd)
     hsc.pack(fill="both", expand=True)
-
     hfr = ctk.CTkFrame(hsc, fg_color=bg)
     hfr.pack(fill="both", expand=True)
 
-    icd = ctk.CTkFrame(rgt, fg_color=crd, corner_radius=14, border_width=1, border_color=brd)
-    icd.pack(fill="x", pady=(0, 10))
+    # ── Right side (summary cards) ───────────────────
+    icd = ctk.CTkFrame(rgt, fg_color=crd,
+                       corner_radius=14, border_width=1,
+                       border_color=brd)
+    icd.pack(fill="x", pady=(0, 12))
+    ctk.CTkLabel(icd, text="INVESTED CAPITAL",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).pack(anchor="w", padx=20,
+                                      pady=(16, 4))
+    ilb = ctk.CTkLabel(icd, text="Rs. 0",
+                       font=("Segoe UI", 34, "bold"),
+                       text_color=txt)
+    ilb.pack(anchor="w", padx=20)
+    bcv = tk.Canvas(icd, height=6, bg=crd,
+                    highlightthickness=0)
+    bcv.pack(fill="x", padx=20, pady=(10, 18))
+    bcv.bind("<Configure>", lambda e: update_bar(
+        sum(h["value"] for h in lst),
+        sum(h["invested"] for h in lst)))
 
-    ctk.CTkLabel(icd, text="INVESTED CAPITAL", font=("Segoe UI", 10), text_color=mut).pack(anchor="w", padx=18, pady=(16, 4))
+    tcd = ctk.CTkFrame(rgt, fg_color=crd,
+                       corner_radius=14, border_width=1,
+                       border_color=brd)
+    tcd.pack(fill="x", pady=(0, 12))
+    ctk.CTkLabel(tcd, text="TOTAL UNREALIZED P&L",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=mut).pack(anchor="w", padx=20,
+                                      pady=(16, 4))
+    rlb = ctk.CTkLabel(tcd, text="Rs. 0",
+                       font=("Segoe UI", 32, "bold"),
+                       text_color=acc)
+    rlb.pack(anchor="w", padx=20)
+    plb = ctk.CTkLabel(tcd, text="+0%",
+                       font=("Segoe UI", 16, "bold"),
+                       text_color=grn)
+    plb.pack(anchor="w", padx=20, pady=(0, 18))
 
-    ilb = ctk.CTkLabel(icd, text="Rs. 0", font=("Segoe UI", 26, "bold"), text_color=txt)
-    ilb.pack(anchor="w", padx=18)
-
-    bcv = tk.Canvas(icd, height=6, bg=crd, highlightthickness=0)
-    bcv.pack(fill="x", padx=18, pady=(8, 16))
-    bcv.bind("<Configure>", dbr)
-
-    tcd = ctk.CTkFrame(rgt, fg_color=crd, corner_radius=14, border_width=1, border_color=brd)
-    tcd.pack(fill="x", pady=(0, 10))
-
-    ctk.CTkLabel(tcd, text="TODAY'S RETURN", font=("Segoe UI", 10), text_color=mut).pack(anchor="w", padx=18, pady=(16, 4))
-
-    rlb = ctk.CTkLabel(tcd, text="Rs. 0", font=("Segoe UI", 24, "bold"), text_color=acc)
-    rlb.pack(anchor="w", padx=18)
-
-    plb = ctk.CTkLabel(tcd, text="+0%", font=("Segoe UI", 12), text_color=grn)
-    plb.pack(anchor="w", padx=18, pady=(0, 16))
-
-    ncd = ctk.CTkFrame(rgt, fg_color=crd, corner_radius=14, border_width=1, border_color=brd)
+    ncd = ctk.CTkFrame(rgt, fg_color=crd,
+                       corner_radius=14, border_width=1,
+                       border_color=brd)
     ncd.pack(fill="both", expand=True)
+    ctk.CTkLabel(ncd, text="PORTFOLIO INSIGHTS",
+                 font=("Segoe UI", 13, "bold"),
+                 text_color=acc).pack(anchor="w", padx=20,
+                                      pady=(16, 8))
+    nlb = ctk.CTkLabel(ncd,
+                       text="Add holdings to view portfolio distribution and risk breakdown.",
+                       font=("Segoe UI", 14), text_color=mut,
+                       wraplength=280, justify="left")
+    nlb.pack(anchor="w", padx=20, pady=(0, 14))
+    ctk.CTkButton(ncd, text="View Full Breakdown ->",
+                  fg_color=crd, border_width=1,
+                  border_color=brd, text_color=txt,
+                  font=("Segoe UI", 14, "bold"),
+                  hover_color="#2E2E35", anchor="w",
+                  command=pop) \
+        .pack(fill="x", padx=20, pady=(0, 18))
 
-    ctk.CTkLabel(ncd, text="PORTFOLIO INSIGHTS", font=("Segoe UI", 10), text_color=acc).pack(anchor="w", padx=18, pady=(16, 6))
-
-    nlb = ctk.CTkLabel(
-        ncd,
-        text="Add holdings to view portfolio distribution and risk breakdown.",
-        font=("Segoe UI", 12),
-        text_color=mut,
-        wraplength=240,
-        justify="left"
-    )
-    nlb.pack(anchor="w", padx=18, pady=(0, 12))
-
-    nbt = ctk.CTkButton(
-        ncd,
-        text="View Full Breakdown ->",
-        fg_color=crd,
-        border_width=1,
-        border_color=brd,
-        text_color=txt,
-        font=("Segoe UI", 11),
-        hover_color="#1c2128",
-        anchor="w",
-        command=pop
-    )
-    nbt.pack(fill="x", padx=18, pady=(0, 16))
-
-    load_investments_from_db()
     ref()
-    return app
-
-
-COLORS = {
-    "bg": "#242424",
-    "panel": "#242424",
-    "card": "#242424",
-    "input": "#242424",
-    "border": "#334155",
-    "text": "#f8fafc",
-    "muted": "#94a3b8",
-    "blue": "#2563eb",
-    "blue_hover": "#1d4ed8",
-    "red": "#ef4444",
-    "red_hover": "#dc2626",
-    "green": "#22c55e",
-    "yellow": "#facc15",
-}
-
-
 
 def create_balance_table():
     query = """
