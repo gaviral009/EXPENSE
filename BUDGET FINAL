@@ -1,0 +1,278 @@
+from datetime import datetime
+import calendar, os, tkinter as tk, mysql.connector
+from tkinter import messagebox
+import customtkinter as ctk
+from PIL import Image
+
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("dark-blue")
+
+bg, crd, brd, acc, txt = "#1B1B1F", "#242429", "#38383F", "#C9A96E", "#F0EDE6"
+mut, grn, red, ibg     = "#9C9993", "#4EBA6F", "#E06A6A", "#161619"
+COLS = ["#4E80EE", "#38A169", "#E56B6F", "#9D72FF", "#319795", "#D69E2E", "#C9A96E", "#F687B3"]
+
+DB     = dict(host="localhost", user="root", password="123456", database="expense_tracker")
+DB_RAW = dict(host="localhost", user="root", password="123456")
+budgets, expenses = [], []
+view_month, view_year = datetime.now().month, datetime.now().year
+
+
+def get_db():
+    return mysql.connector.connect(**DB)
+
+
+def init_db():
+    c = mysql.connector.connect(**DB_RAW); cur = c.cursor()
+    cur.execute("CREATE DATABASE IF NOT EXISTS expense_tracker")
+    c.commit(); c.close()
+    c = get_db(); cur = c.cursor()
+    cur.execute("""CREATE TABLE IF NOT EXISTS budget (
+        id INT AUTO_INCREMENT PRIMARY KEY, category VARCHAR(100),
+        period ENUM('monthly','yearly'), limit_amt DOUBLE,
+        month INT DEFAULT NULL, year INT, created_at DATETIME)""")
+    c.commit(); c.close()
+
+
+def load():
+    global budgets, expenses
+    c = get_db(); cur = c.cursor(dictionary=True)
+    cur.execute("SELECT * FROM budget ORDER BY year, month, category")
+    budgets = [{k: float(v) if k == "limit_amt" else v for k, v in r.items()} for r in cur.fetchall()]
+    cur.execute("""SELECT amount, category, transaction_date AS date
+                   FROM transactions WHERE direction='Expense' ORDER BY transaction_date""")
+    expenses = [{"amount": float(r["amount"]), "category": r["category"], "date": r["date"]} for r in cur.fetchall()]
+    c.close()
+
+
+def add_budget(cat, per, lim, mon, yr):
+    c = get_db(); cur = c.cursor()
+    cur.execute("INSERT INTO budget(category,period,limit_amt,month,year,created_at) VALUES(%s,%s,%s,%s,%s,%s)",
+                (cat, per, lim, mon if per == "monthly" else None, yr, datetime.now()))
+    c.commit(); c.close(); load(); refresh()
+
+
+def delete_budget(bid):
+    c = get_db(); cur = c.cursor()
+    cur.execute("DELETE FROM budget WHERE id = %s", (bid,))
+    c.commit(); c.close(); load(); refresh()
+
+
+def inr(v):
+    n = int(round(v)); s = str(abs(n))
+    if len(s) <= 3:
+        res = s
+    else:
+        l3, rst, g = s[-3:], s[:-3], []
+        while len(rst) > 2:
+            g.append(rst[-2:]); rst = rst[:-2]
+        if rst: g.append(rst)
+        g.reverse(); res = ",".join(g) + "," + l3
+    return ("-Rs. " if n < 0 else "Rs. ") + res
+
+
+def get_spend(month=None, year=None):
+    totals = {}
+    for e in expenses:
+        d = e["date"]
+        if year and d.year != year: continue
+        if month and d.month != month: continue
+        totals[e["category"]] = totals.get(e["category"], 0) + e["amount"]
+    return totals
+
+
+def monthly_totals():
+    t = [0.0] * 12
+    for e in expenses:
+        if e["date"].year == view_year:
+            t[e["date"].month - 1] += e["amount"]
+    return t
+
+
+def draw_pie(cv, data):
+    cv.delete("all"); w, h = cv.winfo_width(), cv.winfo_height()
+    if w < 10: cv.after(100, lambda: draw_pie(cv, data)); return
+    total = sum(data.values()) or 1
+    cx, cy = int(w * 0.38), h // 2
+    R = min(cx - 20, cy - 20, 110); r = int(R * 0.52); st = 90.0
+    for i, (lbl, val) in enumerate(sorted(data.items(), key=lambda x: -x[1])):
+        ext = -(val / total) * 360
+        cv.create_arc(cx-R, cy-R, cx+R, cy+R, start=st, extent=ext,
+                      fill=COLS[i % len(COLS)], outline=crd, width=2)
+        st += ext
+    cv.create_oval(cx-r, cy-r, cx+r, cy+r, fill=crd, outline="")
+    cv.create_text(cx, cy, text=inr(sum(data.values())), fill=txt, font=("Segoe UI", 11, "bold"))
+    lx, ly = cx + R + 20, max(10, cy - len(data) * 13)
+    for i, (lbl, val) in enumerate(sorted(data.items(), key=lambda x: -x[1])[:8]):
+        y = ly + i * 26
+        cv.create_rectangle(lx, y, lx+12, y+12, fill=COLS[i % len(COLS)], outline="")
+        cv.create_text(lx+18, y+6, text=lbl, anchor="w", fill=txt, font=("Segoe UI", 11))
+        cv.create_text(lx+160, y+6, text=f"{val/total*100:.1f}%", anchor="w", fill=acc, font=("Segoe UI", 11, "bold"))
+
+
+def draw_bar(cv, labels, values):
+    cv.delete("all"); w, h = cv.winfo_width(), cv.winfo_height()
+    if w < 10: cv.after(100, lambda: draw_bar(cv, labels, values)); return
+    pl, pr, pt, pb = 65, 10, 20, 38
+    cw, ch = w - pl - pr, h - pt - pb
+    maxv = max(values) if any(v > 0 for v in values) else 1
+    gap = cw // len(labels); bw = int(gap * 0.6)
+    for i in range(5):
+        gy = pt + ch * i // 4
+        cv.create_line(pl, gy, w-pr, gy, fill="#2F2F36", width=1)
+        cv.create_text(pl-6, gy, text=inr(maxv * (1 - i/4)), anchor="e", fill=mut, font=("Segoe UI", 9))
+    for i, (lbl, val) in enumerate(zip(labels, values)):
+        bx = pl + i * gap + (gap - bw) // 2
+        bh = int(ch * val / maxv) if maxv else 0; by = pt + ch - bh
+        cv.create_rectangle(bx, by, bx+bw, pt+ch, fill=acc if val > 0 else brd, outline="")
+        cv.create_text(bx + bw//2, pt+ch+5, text=lbl, fill=mut, font=("Segoe UI", 9), anchor="n")
+        if val > 0:
+            cv.create_text(bx + bw//2, by-3, text=inr(val), fill=txt, font=("Segoe UI", 8), anchor="s")
+
+
+def refresh():
+    ms = get_spend(view_month, view_year)
+    ys = get_spend(year=view_year)
+    mh.configure(text=f"Month: {inr(sum(ms.values()))}")
+    yh.configure(text=f"Year:  {inr(sum(ys.values()))}")
+    nav_lbl.configure(text=f"{calendar.month_name[view_month]}  {view_year}")
+    draw_pie(pie_cv, ms)
+    draw_bar(bar_cv, [calendar.month_abbr[m] for m in range(1, 13)], monthly_totals())
+    for w in tbl_fr.winfo_children(): w.destroy()
+    for j, h_ in enumerate(["Category", "Period", "Limit", "Spent", "Remaining", "%", ""]):
+        ctk.CTkLabel(tbl_fr, text=h_, font=("Segoe UI", 12, "bold"),
+                     text_color=mut).grid(row=0, column=j, padx=8, pady=4)
+    rows = ([b for b in budgets if b["period"] == "monthly"
+             and b.get("month") == view_month and b["year"] == view_year] +
+            [b for b in budgets if b["period"] == "yearly" and b["year"] == view_year])
+    for i, b in enumerate(rows, start=1):
+        sp  = (ms if b["period"] == "monthly" else ys).get(b["category"], 0)
+        rem = b["limit"] - sp
+        pct = sp / b["limit"] * 100 if b["limit"] else 0
+        pc  = red if pct >= 90 else (acc if pct >= 70 else grn)
+        if pct >= 90:
+            messagebox.showwarning("Budget Alert", f'{b["category"]} is at {pct:.1f}% of limit!')
+        vals   = [b["category"], b["period"].capitalize(), inr(b["limit"]),
+                  inr(sp), inr(max(0, rem)), f"{pct:.1f}%"]
+        colors = [txt, mut, txt, txt, grn if rem >= 0 else red, pc]
+        for j, (v, tc) in enumerate(zip(vals, colors)):
+            ctk.CTkLabel(tbl_fr, text=v, font=("Segoe UI", 12),
+                         text_color=tc).grid(row=i, column=j, padx=8, pady=3)
+        ctk.CTkButton(tbl_fr, text="✕", width=28, height=28,
+                      fg_color="transparent", text_color=red, hover_color="#3A1E1E",
+                      command=lambda bid=b["id"]: delete_budget(bid)).grid(row=i, column=6)
+
+
+def open_add():
+    win = ctk.CTkToplevel(app)
+    win.title("Add Budget"); win.geometry("400x360")
+    win.configure(fg_color=bg); win.grab_set(); win.lift()
+    ctk.CTkLabel(win, text="Add Budget", font=("Segoe UI", 20, "bold"),
+                 text_color=txt).pack(anchor="w", padx=24, pady=(20, 12))
+
+    def field(label, ph):
+        row = ctk.CTkFrame(win, fg_color="transparent"); row.pack(fill="x", padx=24, pady=4)
+        ctk.CTkLabel(row, text=label, font=("Segoe UI", 13), text_color=mut,
+                     width=100, anchor="e").pack(side="left", padx=(0, 8))
+        e = ctk.CTkEntry(row, placeholder_text=ph, font=("Segoe UI", 13),
+                         fg_color=ibg, border_color=brd, text_color=txt, placeholder_text_color=mut)
+        e.pack(side="left", fill="x", expand=True); return e
+
+    def dropdown(label, options, default):
+        row = ctk.CTkFrame(win, fg_color="transparent"); row.pack(fill="x", padx=24, pady=4)
+        ctk.CTkLabel(row, text=label, font=("Segoe UI", 13), text_color=mut,
+                     width=100, anchor="e").pack(side="left", padx=(0, 8))
+        cb = ctk.CTkComboBox(row, values=options, font=("Segoe UI", 13),
+                             fg_color=ibg, border_color=brd, text_color=txt,
+                             button_color=brd, dropdown_fg_color=crd)
+        cb.set(default); cb.pack(side="left", fill="x", expand=True); return cb
+
+    e_cat  = field("Category",    "e.g. Food")
+    e_lim  = field("Limit (Rs.)", "5000")
+    cb_per = dropdown("Period", ["Monthly", "Yearly"], "Monthly")
+    cb_mon = dropdown("Month",  [calendar.month_name[m] for m in range(1, 13)], calendar.month_name[view_month])
+    e_yr   = field("Year", str(view_year))
+
+    def save():
+        cat = e_cat.get().strip()
+        if not cat: messagebox.showerror("Error", "Enter a category.", parent=win); return
+        try: lim = float(e_lim.get().replace(",", ""))
+        except ValueError: messagebox.showerror("Error", "Enter a valid limit.", parent=win); return
+        per = cb_per.get().lower()
+        yr  = int(e_yr.get() or view_year)
+        mon = [calendar.month_name[m] for m in range(1, 13)].index(cb_mon.get()) + 1 \
+              if per == "monthly" else None
+        add_budget(cat, per, lim, mon, yr); win.destroy()
+
+    ctk.CTkButton(win, text="Save Budget", fg_color=acc, text_color=bg,
+                  font=("Segoe UI", 14, "bold"), hover_color="#B89758",
+                  command=save).pack(fill="x", padx=24, pady=(16, 22))
+
+
+def nav_month(d):
+    global view_month, view_year
+    view_month += d
+    if view_month > 12: view_month = 1;  view_year += 1
+    if view_month < 1:  view_month = 12; view_year -= 1
+    refresh()
+
+
+def nav_year(d):
+    global view_year; view_year += d; refresh()
+
+
+app = ctk.CTk()
+app.title("Budget Manager"); app.geometry("1300x860"); app.configure(fg_color=bg)
+
+top = ctk.CTkFrame(app, fg_color=bg, height=68)
+top.pack(fill="x", padx=20, pady=(14, 0)); top.pack_propagate(False)
+if os.path.exists("logo.png"):
+    ctk.CTkLabel(top, image=ctk.CTkImage(Image.open("logo.png"), size=(135, 48)), text="").pack(side="left", padx=(0, 12))
+ctk.CTkLabel(top, text="Budget Manager", font=("Segoe UI", 28, "bold"), text_color=txt).pack(side="left")
+yh = ctk.CTkLabel(top, text="Year: Rs. 0",  font=("Segoe UI", 14, "bold"), text_color=acc)
+mh = ctk.CTkLabel(top, text="Month: Rs. 0", font=("Segoe UI", 14, "bold"), text_color=grn)
+yh.pack(side="right", padx=(0, 24)); mh.pack(side="right", padx=(0, 30))
+
+nav = ctk.CTkFrame(app, fg_color=crd, corner_radius=10); nav.pack(fill="x", padx=20, pady=8)
+btn = dict(width=95, height=34, fg_color="transparent", border_width=1,
+           border_color=brd, text_color=txt, hover_color=brd, font=("Segoe UI", 13))
+ctk.CTkButton(nav, text="◀ Year",  command=lambda: nav_year(-1),  **btn).pack(side="left",  padx=6, pady=7)
+ctk.CTkButton(nav, text="◀ Month", command=lambda: nav_month(-1), **btn).pack(side="left",  padx=2, pady=7)
+nav_lbl = ctk.CTkLabel(nav, text="", font=("Segoe UI", 17, "bold"), text_color=acc)
+nav_lbl.pack(side="left", expand=True)
+ctk.CTkButton(nav, text="Month ▶", command=lambda: nav_month(1),  **btn).pack(side="right", padx=2, pady=7)
+ctk.CTkButton(nav, text="Year ▶",  command=lambda: nav_year(1),   **btn).pack(side="right", padx=6, pady=7)
+ctk.CTkButton(nav, text="+ Add Budget", width=130, height=34, fg_color=acc, text_color=bg,
+              font=("Segoe UI", 13, "bold"), hover_color="#B89758",
+              command=open_add).pack(side="right", padx=14, pady=7)
+
+body = ctk.CTkFrame(app, fg_color=bg)
+body.pack(fill="both", expand=True, padx=20, pady=(0, 16))
+body.columnconfigure((0, 1), weight=1); body.rowconfigure((0, 1), weight=1)
+
+def make_card(r, c, title):
+    f = ctk.CTkFrame(body, fg_color=crd, corner_radius=12, border_width=1, border_color=brd)
+    f.grid(row=r, column=c, sticky="nsew",
+           padx=(0, 8) if c == 0 else (8, 0), pady=(0, 8) if r == 0 else (8, 0))
+    ctk.CTkLabel(f, text=title, font=("Segoe UI", 14, "bold"), text_color=txt).pack(anchor="w", padx=16, pady=(14, 4))
+    return f
+
+pf = make_card(0, 0, "Monthly Category Breakdown")
+pie_cv = tk.Canvas(pf, bg=crd, highlightthickness=0, height=230)
+pie_cv.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+
+bf = make_card(0, 1, "Monthly Spend – This Year")
+bar_cv = tk.Canvas(bf, bg=crd, highlightthickness=0, height=230)
+bar_cv.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+
+tf = make_card(1, 1, "Budget vs Spend")
+sc = ctk.CTkScrollableFrame(tf, fg_color="transparent", scrollbar_button_color=brd)
+sc.pack(fill="both", expand=True, padx=8, pady=(0, 10))
+tbl_fr = ctk.CTkFrame(sc, fg_color="transparent"); tbl_fr.pack(fill="both", expand=True)
+
+pie_cv.bind("<Configure>", lambda e: refresh())
+bar_cv.bind("<Configure>", lambda e: refresh())
+
+init_db(); load(); refresh()
+
+if __name__ == "__main__":
+    app.mainloop()
