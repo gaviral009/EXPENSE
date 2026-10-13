@@ -1,12 +1,18 @@
 import datetime as dt
-import sqlite3
+import mysql.connector
 import threading
 from decimal import Decimal, InvalidOperation
 from tkinter import messagebox
 import customtkinter as ctk
 
 
-DATABASE_FILE = "expense_tracker.db"
+# Update these values to match your MySQL server and database.
+DB_CONFIG = {
+    "host": "localhost",
+    "user": "your_mysql_username",
+    "password": "your_mysql_password",
+    "database": "expense_tracker",
+}
 
 COLORS = {
     "bg": "#242424",
@@ -27,18 +33,18 @@ COLORS = {
 
 
 def get_db_connection():
-    return sqlite3.connect(DATABASE_FILE)
+    return mysql.connector.connect(**DB_CONFIG)
 
 
 def create_balance_table():
     query = """
         CREATE TABLE IF NOT EXISTS balance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL,
-            amount REAL NOT NULL,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(255) NOT NULL,
+            amount DECIMAL(12, 2) NOT NULL,
             description TEXT,
-            type TEXT NOT NULL,
-            date TEXT NOT NULL
+            type VARCHAR(50) NOT NULL,
+            date DATE NOT NULL
         )
     """
 
@@ -47,7 +53,7 @@ def create_balance_table():
         cursor = connection.cursor()
         cursor.execute(query)
         connection.commit()
-    except sqlite3.Error as err:
+    except mysql.connector.Error as err:
         messagebox.showerror("Database Error", f"Could not create balance table:\n{err}")
     finally:
         if "connection" in locals():
@@ -57,7 +63,7 @@ def create_balance_table():
 def insert_balance_record(username, amount, description, record_type, record_date):
     query = """
         INSERT INTO balance (username, amount, description, type, date)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
     """
 
     try:
@@ -67,15 +73,15 @@ def insert_balance_record(username, amount, description, record_type, record_dat
             query,
             (
                 username,
-                float(amount),
+                amount,
                 description,
                 record_type,
-                record_date.strftime("%Y-%m-%d"),
+                record_date,
             ),
         )
         connection.commit()
         return True, None
-    except sqlite3.Error as err:
+    except mysql.connector.Error as err:
         return False, str(err)
     finally:
         if "connection" in locals():
@@ -86,17 +92,16 @@ def fetch_balance_records(username):
     query = """
         SELECT id, amount, description, type, date
         FROM balance
-        WHERE username = ?
+        WHERE username = %s
         ORDER BY date DESC, id DESC
     """
 
     try:
         connection = get_db_connection()
-        connection.row_factory = sqlite3.Row
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)
         cursor.execute(query, (username,))
         return cursor.fetchall()
-    except sqlite3.Error as err:
+    except mysql.connector.Error as err:
         messagebox.showerror("Database Error", f"Could not fetch records:\n{err}")
         return []
     finally:
@@ -107,7 +112,7 @@ def fetch_balance_records(username):
 def delete_balance_record(record_id, username):
     query = """
         DELETE FROM balance
-        WHERE id = ? AND username = ?
+        WHERE id = %s AND username = %s
     """
 
     try:
@@ -116,7 +121,7 @@ def delete_balance_record(record_id, username):
         cursor.execute(query, (record_id, username))
         connection.commit()
         return True, None
-    except sqlite3.Error as err:
+    except mysql.connector.Error as err:
         return False, str(err)
     finally:
         if "connection" in locals():
@@ -129,13 +134,12 @@ def fetch_balance_totals(username):
             COALESCE(SUM(CASE WHEN type = 'You owe' THEN amount ELSE 0 END), 0) AS total_you_owe,
             COALESCE(SUM(CASE WHEN type = 'You are owed' THEN amount ELSE 0 END), 0) AS total_you_are_owed
         FROM balance
-        WHERE username = ?
+        WHERE username = %s
     """
 
     try:
         connection = get_db_connection()
-        connection.row_factory = sqlite3.Row
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)
         cursor.execute(query, (username,))
         row = cursor.fetchone()
 
@@ -144,7 +148,7 @@ def fetch_balance_totals(username):
         net_balance = total_you_are_owed - total_you_owe
 
         return total_you_owe, total_you_are_owed, net_balance
-    except sqlite3.Error as err:
+    except mysql.connector.Error as err:
         messagebox.showerror("Database Error", f"Could not calculate totals:\n{err}")
         return Decimal("0.00"), Decimal("0.00"), Decimal("0.00")
     finally:
@@ -518,4 +522,6 @@ if __name__ == "__main__":
     frame.pack(fill="both", expand=True)
 
     app.mainloop()
+
+
 
