@@ -6,7 +6,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from datetime import datetime
 
 BG, GOLD, TEXT = "#1B1B1F", "#C9A96E", "#F0EDE6"
-DB_HOST, DB_USER, DB_PASS = "localhost", "root", "YOUR_MYSQL_PASSWORD"
+DB_HOST, DB_USER, DB_PASS = "localhost", "root", "123456"
 
 # Three separate databases
 DB_INVESTMENTS = "investments_db"
