@@ -6,6 +6,7 @@ import re
 import secrets
 import threading
 import tkinter as tk
+import calendar
 from decimal import Decimal, InvalidOperation
 from tkinter import messagebox
 
@@ -127,8 +128,24 @@ def init_database():
             )
             """
         )
+        cursor.execute(
+            """
+            create table if not exists budget (
+                id int auto_increment primary key,
+                user_id int not null,
+                category varchar(100) not null,
+                period enum('monthly', 'yearly') not null,
+                limit_amt double not null,
+                month int default null,
+                year int not null,
+                created_at datetime not null,
+                foreign key (user_id) references users(id)
+            )
+            """
+        )
         _ensure_user_id_column(cursor, "holdings")
         _ensure_user_id_column(cursor, "portfolio_history")
+        _ensure_user_id_column(cursor, "budget")
         connection.commit()
         cursor.close()
         connection.close()
@@ -2135,6 +2152,442 @@ class BalanceManagementFrame(ctk.CTkFrame):
 
 
 
+def _load_budget_data(username):
+    """Return this user's saved budgets and expense transactions."""
+    user = get_user(username)
+    if not user:
+        return [], []
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            select id, category, period, limit_amt, month, year, created_at
+            from budget
+            where user_id = %s
+            order by year, month, category
+            """,
+            (user["id"],),
+        )
+        budgets = [
+            {key: float(value) if key == "limit_amt" else value for key, value in row.items()}
+            for row in cursor.fetchall()
+        ]
+        cursor.execute(
+            """
+            select amount, category, transaction_date as date
+            from transactions
+            where user_id = %s and direction = 'Expense'
+            order by transaction_date
+            """,
+            (user["id"],),
+        )
+        expenses = [
+            {"amount": float(row["amount"]), "category": row["category"], "date": row["date"]}
+            for row in cursor.fetchall()
+            if row["date"] is not None
+        ]
+        return budgets, expenses
+    except Exception as e:
+        print("BUDGET LOAD ERROR:", e)
+        return [], []
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+def _add_budget(username, category, period, limit_amt, month, year):
+    user = get_user(username)
+    if not user:
+        return False, "User not found."
+    connection = None
+    cursor = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            insert into budget
+                (user_id, category, period, limit_amt, month, year, created_at)
+            values (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                user["id"],
+                category,
+                period,
+                limit_amt,
+                month if period == "monthly" else None,
+                year,
+                dt.datetime.now(),
+            ),
+        )
+        connection.commit()
+        return True, None
+    except Exception as e:
+        return False, str(e)
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+def _delete_budget(username, budget_id):
+    user = get_user(username)
+    if not user:
+        return False, "User not found."
+    connection = None
+    cursor = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            "delete from budget where id = %s and user_id = %s",
+            (budget_id, user["id"]),
+        )
+        connection.commit()
+        return True, None
+    except Exception as e:
+        return False, str(e)
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+def _budget_currency(value):
+    number = int(round(value))
+    digits = str(abs(number))
+    if len(digits) <= 3:
+        result = digits
+    else:
+        last_three, remaining, groups = digits[-3:], digits[:-3], []
+        while len(remaining) > 2:
+            groups.append(remaining[-2:])
+            remaining = remaining[:-2]
+        if remaining:
+            groups.append(remaining)
+        groups.reverse()
+        result = ",".join(groups) + "," + last_three
+    return ("-Rs. " if number < 0 else "Rs. ") + result
+
+
+def build_budget(parent, username, period):
+    """Build the monthly or yearly budget view inside the main application."""
+    bg, card, border, accent, text = "#1B1B1F", "#242429", "#38383F", "#C9A96E", "#F0EDE6"
+    muted, green, red, input_bg = "#9C9993", "#4EBA6F", "#E06A6A", "#161619"
+    colors = ["#4E80EE", "#38A169", "#E56B6F", "#9D72FF", "#319795", "#D69E2E", "#C9A96E", "#F687B3"]
+    state = {
+        "budgets": [],
+        "expenses": [],
+        "month": dt.datetime.now().month,
+        "year": dt.datetime.now().year,
+        "warned": set(),
+    }
+
+    parent.grid_columnconfigure(0, weight=1)
+    parent.grid_rowconfigure(0, weight=1)
+    budget_frame = ctk.CTkFrame(parent, fg_color=bg)
+    budget_frame.grid(row=0, column=0, sticky="nsew")
+
+    top = ctk.CTkFrame(budget_frame, fg_color=bg, height=68)
+    top.pack(fill="x", padx=20, pady=(14, 0))
+    top.pack_propagate(False)
+    title = "Monthly Budget" if period == "monthly" else "Yearly Budget"
+    ctk.CTkLabel(top, text=title, font=("Segoe UI", 28, "bold"), text_color=text).pack(side="left")
+    year_total = ctk.CTkLabel(top, text="Year: Rs. 0", font=("Segoe UI", 14, "bold"), text_color=accent)
+    period_total = ctk.CTkLabel(
+        top,
+        text=("Month: Rs. 0" if period == "monthly" else "Selected year: Rs. 0"),
+        font=("Segoe UI", 14, "bold"),
+        text_color=green,
+    )
+    year_total.pack(side="right", padx=(0, 24))
+    period_total.pack(side="right", padx=(0, 30))
+
+    nav = ctk.CTkFrame(budget_frame, fg_color=card, corner_radius=10)
+    nav.pack(fill="x", padx=20, pady=8)
+    button_style = dict(
+        width=95,
+        height=34,
+        fg_color="transparent",
+        border_width=1,
+        border_color=border,
+        text_color=text,
+        hover_color=border,
+        font=("Segoe UI", 13),
+    )
+    nav_label = ctk.CTkLabel(nav, text="", font=("Segoe UI", 17, "bold"), text_color=accent)
+
+    body = ctk.CTkFrame(budget_frame, fg_color=bg)
+    body.pack(fill="both", expand=True, padx=20, pady=(0, 16))
+    body.columnconfigure((0, 1), weight=1)
+    body.rowconfigure((0, 1), weight=1)
+
+    def spend_by_category(month=None, year=None):
+        totals = {}
+        for expense in state["expenses"]:
+            expense_date = expense["date"]
+            if year and expense_date.year != year:
+                continue
+            if month and expense_date.month != month:
+                continue
+            category = expense["category"]
+            totals[category] = totals.get(category, 0) + expense["amount"]
+        return totals
+
+    def monthly_totals():
+        totals = [0.0] * 12
+        for expense in state["expenses"]:
+            if expense["date"].year == state["year"]:
+                totals[expense["date"].month - 1] += expense["amount"]
+        return totals
+
+    def draw_pie(canvas, data):
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 10 or height < 10:
+            canvas.after(100, lambda: draw_pie(canvas, data))
+            return
+        total = sum(data.values()) or 1
+        center_x, center_y = int(width * 0.38), height // 2
+        radius = min(center_x - 20, center_y - 20, 110)
+        inner_radius = int(radius * 0.52)
+        start = 90.0
+        for index, (_, value) in enumerate(sorted(data.items(), key=lambda item: -item[1])):
+            extent = -(value / total) * 360
+            canvas.create_arc(
+                center_x - radius,
+                center_y - radius,
+                center_x + radius,
+                center_y + radius,
+                start=start,
+                extent=extent,
+                fill=colors[index % len(colors)],
+                outline=card,
+                width=2,
+            )
+            start += extent
+        canvas.create_oval(
+            center_x - inner_radius,
+            center_y - inner_radius,
+            center_x + inner_radius,
+            center_y + inner_radius,
+            fill=card,
+            outline="",
+        )
+        canvas.create_text(center_x, center_y, text=_budget_currency(sum(data.values())), fill=text, font=("Segoe UI", 11, "bold"))
+        legend_x = center_x + radius + 20
+        legend_y = max(10, center_y - len(data) * 13)
+        for index, (label, value) in enumerate(sorted(data.items(), key=lambda item: -item[1])[:8]):
+            y = legend_y + index * 26
+            canvas.create_rectangle(legend_x, y, legend_x + 12, y + 12, fill=colors[index % len(colors)], outline="")
+            canvas.create_text(legend_x + 18, y + 6, text=label, anchor="w", fill=text, font=("Segoe UI", 11))
+            canvas.create_text(legend_x + 160, y + 6, text=f"{value / total * 100:.1f}%", anchor="w", fill=accent, font=("Segoe UI", 11, "bold"))
+
+    def draw_bar(canvas, labels, values):
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 10 or height < 10:
+            canvas.after(100, lambda: draw_bar(canvas, labels, values))
+            return
+        padding_left, padding_right, padding_top, padding_bottom = 65, 10, 20, 38
+        chart_width = width - padding_left - padding_right
+        chart_height = height - padding_top - padding_bottom
+        maximum = max(values) if any(value > 0 for value in values) else 1
+        gap = chart_width // len(labels)
+        bar_width = int(gap * 0.6)
+        for index in range(5):
+            grid_y = padding_top + chart_height * index // 4
+            canvas.create_line(padding_left, grid_y, width - padding_right, grid_y, fill="#2F2F36", width=1)
+            canvas.create_text(padding_left - 6, grid_y, text=_budget_currency(maximum * (1 - index / 4)), anchor="e", fill=muted, font=("Segoe UI", 9))
+        for index, (label, value) in enumerate(zip(labels, values)):
+            bar_x = padding_left + index * gap + (gap - bar_width) // 2
+            bar_height = int(chart_height * value / maximum) if maximum else 0
+            bar_y = padding_top + chart_height - bar_height
+            canvas.create_rectangle(bar_x, bar_y, bar_x + bar_width, padding_top + chart_height, fill=accent if value > 0 else border, outline="")
+            canvas.create_text(bar_x + bar_width // 2, padding_top + chart_height + 5, text=label, fill=muted, font=("Segoe UI", 9), anchor="n")
+            if value > 0:
+                canvas.create_text(bar_x + bar_width // 2, bar_y - 3, text=_budget_currency(value), fill=text, font=("Segoe UI", 8), anchor="s")
+
+    def make_card(row, column, title_text):
+        frame = ctk.CTkFrame(body, fg_color=card, corner_radius=12, border_width=1, border_color=border)
+        frame.grid(
+            row=row,
+            column=column,
+            sticky="nsew",
+            padx=(0, 8) if column == 0 else (8, 0),
+            pady=(0, 8) if row == 0 else (8, 0),
+        )
+        ctk.CTkLabel(frame, text=title_text, font=("Segoe UI", 14, "bold"), text_color=text).pack(anchor="w", padx=16, pady=(14, 4))
+        return frame
+
+    pie_frame = make_card(0, 0, "Category Breakdown")
+    pie_canvas = tk.Canvas(pie_frame, bg=card, highlightthickness=0, height=230)
+    pie_canvas.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+    bar_frame = make_card(0, 1, "Monthly Spend – This Year")
+    bar_canvas = tk.Canvas(bar_frame, bg=card, highlightthickness=0, height=230)
+    bar_canvas.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+    table_frame = make_card(1, 1, "Budget vs Spend")
+    scroll = ctk.CTkScrollableFrame(table_frame, fg_color="transparent", scrollbar_button_color=border)
+    scroll.pack(fill="both", expand=True, padx=8, pady=(0, 10))
+    table = ctk.CTkFrame(scroll, fg_color="transparent")
+    table.pack(fill="both", expand=True)
+
+    def reload_data():
+        state["budgets"], state["expenses"] = _load_budget_data(username)
+
+    def refresh():
+        month_spend = spend_by_category(state["month"], state["year"])
+        year_spend = spend_by_category(year=state["year"])
+        selected_spend = month_spend if period == "monthly" else year_spend
+        period_total.configure(
+            text=(f"Month: {_budget_currency(sum(month_spend.values()))}" if period == "monthly" else f"Selected year: {_budget_currency(sum(year_spend.values()))}")
+        )
+        year_total.configure(text=f"Year: {_budget_currency(sum(year_spend.values()))}")
+        nav_label.configure(text=f"{calendar.month_name[state['month']]}  {state['year']}")
+        draw_pie(pie_canvas, selected_spend)
+        draw_bar(bar_canvas, [calendar.month_abbr[month] for month in range(1, 13)], monthly_totals())
+        for widget in table.winfo_children():
+            widget.destroy()
+        for column, heading in enumerate(["Category", "Period", "Limit", "Spent", "Remaining", "%", ""]):
+            ctk.CTkLabel(table, text=heading, font=("Segoe UI", 12, "bold"), text_color=muted).grid(row=0, column=column, padx=8, pady=4)
+        rows = [
+            budget
+            for budget in state["budgets"]
+            if budget["period"] == period
+            and budget["year"] == state["year"]
+            and (period != "monthly" or budget.get("month") == state["month"])
+        ]
+        for row_index, budget in enumerate(rows, start=1):
+            spent = selected_spend.get(budget["category"], 0)
+            limit_amt = budget["limit_amt"]
+            remaining = limit_amt - spent
+            percentage = spent / limit_amt * 100 if limit_amt else 0
+            percentage_color = red if percentage >= 90 else (accent if percentage >= 70 else green)
+            if percentage >= 90 and budget["id"] not in state["warned"]:
+                state["warned"].add(budget["id"])
+                budget_frame.after(100, lambda item=budget, value=percentage: messagebox.showwarning("Budget Alert", f"{item['category']} is at {value:.1f}% of limit!"))
+            values = [
+                budget["category"],
+                budget["period"].capitalize(),
+                _budget_currency(limit_amt),
+                _budget_currency(spent),
+                _budget_currency(max(0, remaining)),
+                f"{percentage:.1f}%",
+            ]
+            value_colors = [text, muted, text, text, green if remaining >= 0 else red, percentage_color]
+            for column, (value, color) in enumerate(zip(values, value_colors)):
+                ctk.CTkLabel(table, text=value, font=("Segoe UI", 12), text_color=color).grid(row=row_index, column=column, padx=8, pady=3)
+            ctk.CTkButton(
+                table,
+                text="✕",
+                width=28,
+                height=28,
+                fg_color="transparent",
+                text_color=red,
+                hover_color="#3A1E1E",
+                command=lambda budget_id=budget["id"]: delete(budget_id),
+            ).grid(row=row_index, column=6)
+
+    def delete(budget_id):
+        success, error = _delete_budget(username, budget_id)
+        if not success:
+            messagebox.showerror("Database Error", f"Could not delete budget:\n{error}")
+            return
+        state["warned"].discard(budget_id)
+        reload_data()
+        refresh()
+
+    def open_add():
+        window = ctk.CTkToplevel(budget_frame)
+        window.title("Add Budget")
+        window.geometry("400x360")
+        window.configure(fg_color=bg)
+        window.grab_set()
+        window.lift()
+        ctk.CTkLabel(window, text="Add Budget", font=("Segoe UI", 20, "bold"), text_color=text).pack(anchor="w", padx=24, pady=(20, 12))
+
+        def field(label, placeholder):
+            row = ctk.CTkFrame(window, fg_color="transparent")
+            row.pack(fill="x", padx=24, pady=4)
+            ctk.CTkLabel(row, text=label, font=("Segoe UI", 13), text_color=muted, width=100, anchor="e").pack(side="left", padx=(0, 8))
+            entry = ctk.CTkEntry(row, placeholder_text=placeholder, font=("Segoe UI", 13), fg_color=input_bg, border_color=border, text_color=text, placeholder_text_color=muted)
+            entry.pack(side="left", fill="x", expand=True)
+            return entry
+
+        def dropdown(label, options, default):
+            row = ctk.CTkFrame(window, fg_color="transparent")
+            row.pack(fill="x", padx=24, pady=4)
+            ctk.CTkLabel(row, text=label, font=("Segoe UI", 13), text_color=muted, width=100, anchor="e").pack(side="left", padx=(0, 8))
+            combo = ctk.CTkComboBox(row, values=options, font=("Segoe UI", 13), fg_color=input_bg, border_color=border, text_color=text, button_color=border, dropdown_fg_color=card)
+            combo.set(default)
+            combo.pack(side="left", fill="x", expand=True)
+            return combo
+
+        category_entry = field("Category", "e.g. Food")
+        limit_entry = field("Limit (Rs.)", "5000")
+        dropdown("Period", [period.capitalize()], period.capitalize())
+        month_combo = dropdown("Month", [calendar.month_name[month] for month in range(1, 13)], calendar.month_name[state["month"]])
+        year_entry = field("Year", str(state["year"]))
+
+        def save():
+            category = category_entry.get().strip()
+            if not category:
+                messagebox.showerror("Error", "Enter a category.", parent=window)
+                return
+            try:
+                limit_amt = float(limit_entry.get().replace(",", ""))
+                year = int(year_entry.get() or state["year"])
+            except ValueError:
+                messagebox.showerror("Error", "Enter a valid limit and year.", parent=window)
+                return
+            month = [calendar.month_name[item] for item in range(1, 13)].index(month_combo.get()) + 1 if period == "monthly" else None
+            success, error = _add_budget(username, category, period, limit_amt, month, year)
+            if not success:
+                messagebox.showerror("Database Error", f"Could not save budget:\n{error}", parent=window)
+                return
+            reload_data()
+            refresh()
+            window.destroy()
+
+        ctk.CTkButton(window, text="Save Budget", fg_color=accent, text_color=bg, font=("Segoe UI", 14, "bold"), hover_color="#B89758", command=save).pack(fill="x", padx=24, pady=(16, 22))
+
+    def navigate_month(delta):
+        state["month"] += delta
+        if state["month"] > 12:
+            state["month"] = 1
+            state["year"] += 1
+        if state["month"] < 1:
+            state["month"] = 12
+            state["year"] -= 1
+        refresh()
+
+    def navigate_year(delta):
+        state["year"] += delta
+        refresh()
+
+    ctk.CTkButton(nav, text="◀ Year", command=lambda: navigate_year(-1), **button_style).pack(side="left", padx=6, pady=7)
+    ctk.CTkButton(nav, text="◀ Month", command=lambda: navigate_month(-1), **button_style).pack(side="left", padx=2, pady=7)
+    nav_label.pack(side="left", expand=True)
+    ctk.CTkButton(nav, text="Month ▶", command=lambda: navigate_month(1), **button_style).pack(side="right", padx=2, pady=7)
+    ctk.CTkButton(nav, text="Year ▶", command=lambda: navigate_year(1), **button_style).pack(side="right", padx=6, pady=7)
+    ctk.CTkButton(nav, text="+ Add Budget", width=130, height=34, fg_color=accent, text_color=bg, font=("Segoe UI", 13, "bold"), hover_color="#B89758", command=open_add).pack(side="right", padx=14, pady=7)
+
+    pie_canvas.bind("<Configure>", lambda event: refresh())
+    bar_canvas.bind("<Configure>", lambda event: refresh())
+    reload_data()
+    refresh()
+    return budget_frame
+
+
+
 def _hash_password(password, salt=None):
     if salt is None:
         salt = secrets.token_hex(16)
@@ -2173,7 +2626,16 @@ def _clear_root(root):
         child.destroy()
 
 
-def sideb(parent, on_home=None, on_income=None, on_investments=None, on_balance=None, on_analytics=None):
+def sideb(
+    parent,
+    on_home=None,
+    on_income=None,
+    on_investments=None,
+    on_balance=None,
+    on_analytics=None,
+    on_budget_monthly=None,
+    on_budget_yearly=None,
+):
     icon1 = ctk.CTkImage(dark_image=Image.open(_asset_path("icon1.png")))
     icon2 = ctk.CTkImage(dark_image=Image.open(_asset_path("icon2.png")))
     icon3 = ctk.CTkImage(dark_image=Image.open(_asset_path("icon3.png")))
@@ -2292,6 +2754,7 @@ def sideb(parent, on_home=None, on_income=None, on_investments=None, on_balance=
         text_color="white",
         anchor="w",
         font=("Calibri", 16),
+        command=on_budget_monthly,
     )
     bt4_2 = ctk.CTkButton(
         sidebar,
@@ -2299,10 +2762,11 @@ def sideb(parent, on_home=None, on_income=None, on_investments=None, on_balance=
         height=50,
         fg_color="#444444",
         hover_color="#00A998",
-        text="   Long Term",
+        text="   Yearly",
         text_color="white",
         anchor="w",
         font=("Calibri", 16),
+        command=on_budget_yearly,
     )
 
     bt1.grid(row=1, column=0, sticky="ew")
@@ -2366,6 +2830,14 @@ def build_logged_in(root, username):
         holder.grid(row=0, column=0, sticky="nsew")
         build_analytics(holder, username)
 
+    def show_monthly_budget():
+        _clear_content(content)
+        build_budget(content, username, "monthly")
+
+    def show_yearly_budget():
+        _clear_content(content)
+        build_budget(content, username, "yearly")
+
     sideb(
         fra,
         on_home=show_dashboard,
@@ -2373,6 +2845,8 @@ def build_logged_in(root, username):
         on_investments=show_investments,
         on_balance=show_balance,
         on_analytics=show_analytics,
+        on_budget_monthly=show_monthly_budget,
+        on_budget_yearly=show_yearly_budget,
     )
     show_dashboard()
     return fra
